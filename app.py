@@ -294,3 +294,4 @@ elif menu == "Tesorería":
                             guardar_fila("TESORERIA", valores_teso)
                             st.success("¡Datos de tesorería guardados encadenadamente de forma exitosa!")
                             st.rerun()
+                            
