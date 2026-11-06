@@ -185,20 +185,29 @@ elif menu == "Tesorería":
         n_orden_teso = st.selectbox("Seleccione el N° de Orden de Compra para Tesorería:", [""] + lista_ordenes)
         
         if n_orden_teso and n_orden_teso != "":
-            # Filtramos las facturas correspondientes a esta orden de compra
             facturas_orden = df_val_teso[df_val_teso["NUMERO ORDEN DE COMPRAS"].astype(str) == n_orden_teso]
             
-            # Verificamos qué facturas ya tienen pagos registrados en Tesorería
             facturas_pendientes = []
             for _, fac in facturas_orden.iterrows():
                 n_fac = str(fac.get("N FACTURA", ""))
-                # Comprobamos si ya fue pagada totalmente en tesorería (si existe registro con pago total o suma de pagos)
                 pagada_total = False
+                
+                # Verificamos si la suma de los pagos alcanza al monto total de la factura o si se registró un "Pago Total"
                 if not df_tesoreria.empty and "N FACTURA" in df_tesoreria.columns:
                     pagos_fac = df_tesoreria[df_tesoreria["N FACTURA"].astype(str) == n_fac]
+                    total_pagado_acumulado = 0.0
                     for _, p in pagos_fac.iterrows():
                         if str(p.get("TIPO PAGO", "")) == "Pago Total":
                             pagada_total = True
+                        try:
+                            # Buscamos el monto abonado en la última columna de tesorería
+                            total_pagado_acumulado += float(p.iloc[-1]) if pd.notnull(p.iloc[-1]) else 0.0
+                        except:
+                            pass
+                    
+                    monto_f_total = float(fac.get("MONTO FACTURA", 0.0) if pd.notnull(fac.get("MONTO FACTURA")) else 0.0)
+                    if total_pagado_acumulado >= monto_f_total and monto_f_total > 0:
+                        pagada_total = True
                 
                 if not pagada_total:
                     facturas_pendientes.append(fac)
@@ -214,17 +223,20 @@ elif menu == "Tesorería":
                     
                     monto_fac_val = float(datos_factura.get("MONTO FACTURA", 0.0) if pd.notnull(datos_factura.get("MONTO FACTURA")) else 0.0)
                     
-                    # Calculamos si ya tuvo pagos parciales previos
+                    # Calculamos los pagos previos sumando los montos reales pagados en Tesorería
                     monto_pagado_previo = 0.0
-                    if not df_tesoreria.empty and "N FACTURA" in df_tesoreria.columns and "MONTO PAGO" in df_tesoreria.columns:
+                    if not df_tesoreria.empty and "N FACTURA" in df_tesoreria.columns:
                         pagos_previos = df_tesoreria[df_tesoreria["N FACTURA"].astype(str) == n_factura_seleccionada]
                         for _, p in pagos_previos.iterrows():
                             try:
-                                monto_pagado_previo += float(p.get("MONTO PAGO", 0.0))
+                                # Tomamos el valor de la última columna (que corresponde al monto abonado)
+                                monto_pagado_previo += float(p.iloc[-1]) if pd.notnull(p.iloc[-1]) else 0.0
                             except:
                                 pass
                     
                     monto_restante = monto_fac_val - monto_pagado_previo
+                    if monto_restante < 0:
+                        monto_restante = 0.0
                     
                     st.info(f"**Proveedor:** {datos_factura.get('PROVEEDOR', '')} | **Monto Total Factura:** ${monto_fac_val:,.2f}")
                     if monto_pagado_previo > 0:
@@ -244,7 +256,6 @@ elif menu == "Tesorería":
                         
                         submit_teso = st.form_submit_button("Guardar Datos de Tesorería")
                         if submit_submit := submit_teso:
-                            # Estructura para Tesorería (incluyendo el tipo de pago y monto abonado en las columnas adicionales)
                             valores_teso = [
                                 str(datos_factura.get("NUMERO ORDEN DE COMPRAS", "")),
                                 str(datos_factura.get("FECHA", "")),
