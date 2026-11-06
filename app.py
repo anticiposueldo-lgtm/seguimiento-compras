@@ -70,13 +70,7 @@ if menu == "Compras":
         else:
                     st.warning("Por favor completa al menos el Número de Orden de Compras.")
 
-    st.subheader("📋 Registros Actuales en Compras")
-    df_compras = obtener_datos("COMPRAS")
-    if not df_compras.empty:
-        st.dataframe(df_compras, use_container_width=True)
-    else:
-        st.info("No hay registros todavía o verifica la conexión.")
-
+  
 # ==========================================
 # 2. SECCIÓN FACTURAS
 # ==========================================
