@@ -35,23 +35,28 @@ def guardar_fila(sheet_name, values):
         st.error(f"Error al guardar: {e}")
         return None
 
-def actualizar_fila(sheet_name, values):
-    try:
-        payload = {"action": "updateRow", "sheet": sheet_name, "values": values}
-        response = requests.post(WEB_APP_URL, json=payload)
-        return response.json()
-    except Exception as e:
-        st.error(f"Error al actualizar: {e}")
-        return None
+def actualizar_fila(
+    n_orden, fecha, n_proveedor, proveedor, monto, estado
+):
+  try:
+    url = (
+        f"{WEB_APP_URL}?action=updateRow&nOrden={n_orden}&fecha={fecha}&nProveedor={n_proveedor}&proveedor={urllib.parse.quote(proveedor)}&monto={monto}&estado={estado}"
+    )
+    response = requests.get(url)
+    return response.json()
+  except Exception as e:
+    st.error(f"Error al actualizar: {e}")
+    return None
+
 
 def eliminar_fila(sheet_name, orden):
-    try:
-        payload = {"action": "deleteRow", "sheet": sheet_name, "orden": orden}
-        response = requests.post(WEB_APP_URL, json=payload)
-        return response.json()
-    except Exception as e:
-        st.error(f"Error al eliminar: {e}")
-        return None
+  try:
+    url = f"{WEB_APP_URL}?action=deleteRow&orden={orden}"
+    response = requests.get(url)
+    return response.json()
+  except Exception as e:
+    st.error(f"Error al eliminar: {e}")
+    return None
 
 menu = st.sidebar.selectbox("Seleccionar Sección", ["Compras", "Facturas", "Tesorería"])
 
