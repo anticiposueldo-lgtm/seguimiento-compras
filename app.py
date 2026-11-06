@@ -193,24 +193,23 @@ elif menu == "Tesorería":
                 pagada_total = False
                 
                 if not df_tesoreria.empty:
-                    # Buscamos coincidencias por N° de Factura en la hoja de tesorería
-                    col_fac_key = next((c for c in df_tesoreria.columns if "FACTURA" in c.upper() and c.upper() != "MONTO FACTURA"), None)
-                    col_tipo_key = next((c for c in df_tesoreria.columns if "TIPO" in c.upper()), None)
-                    col_monto_pago = next((c for c in df_tesoreria.columns if "PAGO" in c.upper() or "MONTO" in c.upper() and c.upper() != "MONTO FACTURA" and c.upper() != "MONTO"), None)
+                    # Buscamos por número de factura (Columna G de facturas / Columna G de tesorería)
+                    col_fac_teso = df_tesoreria.columns[6] if len(df_tesoreria.columns) > 6 else None
+                    col_pago_teso = df_tesoreria.columns[8] if len(df_tesoreria.columns) > 8 else None # Columna I (Monto Pagado)
                     
-                    if col_fac_key:
-                        pagos_fac = df_tesoreria[df_tesoreria[col_fac_key].astype(str) == n_fac]
+                    if col_fac_teso and col_pago_teso:
+                        pagos_fac = df_tesoreria[df_tesoreria[col_fac_teso].astype(str) == n_fac]
                         total_pagado_acumulado = 0.0
                         for _, p in pagos_fac.iterrows():
-                            if col_tipo_key and str(p.get(col_tipo_key, "")) == "Pago Total":
-                                pagada_total = True
-                            if col_monto_pago:
-                                try:
-                                    total_pagado_acumulado += float(p.get(col_monto_pago, 0.0))
-                                except:
-                                    pass
+                            try:
+                                total_pagado_acumulado += float(p.get(col_pago_teso, 0.0))
+                            except:
+                                pass
                         
+                        # Monto de la factura (Columna E de Tesorería)
+                        col_monto_fac_teso = df_tesoreria.columns[4] if len(df_tesoreria.columns) > 4 else None
                         monto_f_total = float(fac.get("MONTO FACTURA", 0.0) if pd.notnull(fac.get("MONTO FACTURA")) else 0.0)
+                        
                         if total_pagado_acumulado >= monto_f_total and monto_f_total > 0:
                             pagada_total = True
                 
@@ -228,17 +227,17 @@ elif menu == "Tesorería":
                     
                     monto_fac_val = float(datos_factura.get("MONTO FACTURA", 0.0) if pd.notnull(datos_factura.get("MONTO FACTURA")) else 0.0)
                     
-                    # Sumamos los pagos previos buscando específicamente en la columna de pago
+                    # Sumamos los pagos previos de la Columna I (pago_teso)
                     monto_pagado_previo = 0.0
                     if not df_tesoreria.empty:
-                        col_fac_key = next((c for c in df_tesoreria.columns if "FACTURA" in c.upper() and c.upper() != "MONTO FACTURA"), None)
-                        col_monto_pago = next((c for c in df_tesoreria.columns if "PAGO" in c.upper() or "MONTO" in c.upper() and c.upper() != "MONTO FACTURA" and c.upper() != "MONTO"), None)
+                        col_fac_teso = df_tesoreria.columns[6] if len(df_tesoreria.columns) > 6 else None
+                        col_pago_teso = df_tesoreria.columns[8] if len(df_tesoreria.columns) > 8 else None
                         
-                        if col_fac_key and col_monto_pago:
-                            pagos_previos = df_tesoreria[df_tesoreria[col_fac_key].astype(str) == n_factura_seleccionada]
+                        if col_fac_teso and col_pago_teso:
+                            pagos_previos = df_tesoreria[df_tesoreria[col_fac_teso].astype(str) == n_factura_seleccionada]
                             for _, p in pagos_previos.iterrows():
                                 try:
-                                    monto_pagado_previo += float(p.get(col_monto_pago, 0.0))
+                                    monto_pagado_previo += float(p.get(col_pago_teso, 0.0))
                                 except:
                                     pass
                     
@@ -269,18 +268,16 @@ elif menu == "Tesorería":
                                 str(datos_factura.get("FECHA", "")),
                                 str(datos_factura.get("N PROVEEDOR", "")),
                                 str(datos_factura.get("PROVEEDOR", "")),
-                                float(datos_factura.get("MONTO", 0.0) if pd.notnull(datos_factura.get("MONTO")) else 0.0),
+                                float(monto_fac_val),    # Columna E (Monto de la Factura)
                                 str(datos_factura.get("ESTADO", "")),
                                 str(datos_factura.get("N FACTURA", "")),
                                 str(datos_factura.get("FECHA DE COMPROBANTE", "")),
-                                float(monto_fac_val),
+                                float(monto_a_pagar),    # Columna I (Monto Pagado en esta operación)
                                 str(datos_factura.get("FECHA DE VENCIMIENTO", "")),
                                 str(fecha_pago),         
                                 str(n_orden_pago),       
                                 str(medio_pago),         
-                                str(fecha_debito_cheque),
-                                str(tipo_pago),
-                                float(monto_a_pagar)
+                                str(fecha_debito_cheque) 
                             ]
                             
                             guardar_fila("TESORERIA", valores_teso)
