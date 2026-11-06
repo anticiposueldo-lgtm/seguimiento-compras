@@ -43,29 +43,21 @@ menu = st.sidebar.selectbox("Seleccionar Sección", ["Compras", "Facturas", "Tes
 if menu == "Compras":
     st.header("📝 Registro de Órdenes de Compra")
     
-    if "n_prov" not in st.session_state:
-        st.session_state.n_prov = ""
-    if "nombre_prov" not in st.session_state:
-        st.session_state.nombre_prov = ""
-
     with st.form("form_compras"):
         n_orden = st.text_input("NUMERO ORDEN DE COMPRAS")
         fecha = st.date_input("FECHA")
         
-        n_proveedor = st.text_input("N PROVEEDOR", value=st.session_state.n_prov)
-        btn_buscar_prov = st.form_submit_button("🔍 Buscar Proveedor por Código")
+        # Campo de N° Proveedor (al cambiar y presionar Enter o salir del campo, busca solo)
+        n_proveedor = st.text_input("N PROVEEDOR")
         
-        if btn_buscar_prov and n_proveedor:
-            razon = buscar_proveedor(n_proveedor)
-            if razon:
-                st.session_state.n_prov = n_proveedor
-                st.session_state.nombre_prov = razon
-                st.success(f"Proveedor encontrado: {razon}")
-            else:
-                st.session_state.nombre_prov = "PROVEEDOR NO ENCONTRADO"
-                st.warning("No se encontró ningún proveedor con ese código.")
+        # Buscamos automáticamente si se ingresó un código
+        nombre_proveedor_auto = ""
+        if n_proveedor:
+            nombre_proveedor_auto = buscar_proveedor(n_proveedor)
+            if not nombre_proveedor_auto:
+                nombre_proveedor_auto = "PROVEEDOR NO ENCONTRADO"
 
-        proveedor = st.text_input("PROVEEDOR", value=st.session_state.nombre_prov)
+        proveedor = st.text_input("PROVEEDOR", value=nombre_proveedor_auto)
         monto = st.number_input("MONTO", min_value=0.0, format="%.2f")
         estado = st.selectbox("ESTADO", ["Pendiente", "Aprobado", "Rechazado", "Pagado"])
         
