@@ -6,36 +6,35 @@ st.set_page_config(page_title="Seguimiento Cierre Anual", layout="wide")
 
 st.title("📊 Sistema de Seguimiento: Compras, Facturas y Tesorería")
 
-# --- URL DE TU APLICACIÓN WEB DE APPS SCRIPT ---
-# Pega aquí la URL exacta que te generó Apps Script al implementar
 WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxYoMIZxbExpGLZNTMedKwFrPIAdEyZKRV205xefKoYZ65XxKgvAeXR5SQ-LALU8cndww/exec"
 
-# Función para obtener datos desde Google Sheets vía Apps Script
 def obtener_datos(sheet_name):
     try:
         url = f"{WEB_APP_URL}?action=getData&sheet={sheet_name}"
         response = requests.get(url)
-        data = response.json()
-        return pd.DataFrame(data)
+        return pd.DataFrame(response.json())
     except Exception as e:
         st.error(f"Error al conectar con la hoja {sheet_name}: {e}")
         return pd.DataFrame()
 
-# Función para enviar/agregar una fila nueva a Google Sheets vía Apps Script
+def buscar_proveedor(codigo):
+    try:
+        url = f"{WEB_APP_URL}?action=getProveedor&codigo={codigo}"
+        response = requests.get(url)
+        data = response.json()
+        return data.get("razonSocial", "")
+    except:
+        return ""
+
 def guardar_fila(sheet_name, values):
     try:
-        payload = {
-            "action": "appendRow",
-            "sheet": sheet_name,
-            "values": values
-        }
+        payload = {"action": "appendRow", "sheet": sheet_name, "values": values}
         response = requests.post(WEB_APP_URL, json=payload)
         return response.json()
     except Exception as e:
         st.error(f"Error al guardar: {e}")
         return None
 
-# Menú lateral para navegar
 menu = st.sidebar.selectbox("Seleccionar Sección", ["Compras", "Facturas", "Tesorería"])
 
 # ==========================================
@@ -44,11 +43,29 @@ menu = st.sidebar.selectbox("Seleccionar Sección", ["Compras", "Facturas", "Tes
 if menu == "Compras":
     st.header("📝 Registro de Órdenes de Compra")
     
+    if "n_prov" not in st.session_state:
+        st.session_state.n_prov = ""
+    if "nombre_prov" not in st.session_state:
+        st.session_state.nombre_prov = ""
+
     with st.form("form_compras"):
         n_orden = st.text_input("NUMERO ORDEN DE COMPRAS")
         fecha = st.date_input("FECHA")
-        n_proveedor = st.text_input("N PROVEEDOR")
-        proveedor = st.text_input("PROVEEDOR")
+        
+        n_proveedor = st.text_input("N PROVEEDOR", value=st.session_state.n_prov)
+        btn_buscar_prov = st.form_submit_button("🔍 Buscar Proveedor por Código")
+        
+        if btn_buscar_prov and n_proveedor:
+            razon = buscar_proveedor(n_proveedor)
+            if razon:
+                st.session_state.n_prov = n_proveedor
+                st.session_state.nombre_prov = razon
+                st.success(f"Proveedor encontrado: {razon}")
+            else:
+                st.session_state.nombre_prov = "PROVEEDOR NO ENCONTRADO"
+                st.warning("No se encontró ningún proveedor con ese código.")
+
+        proveedor = st.text_input("PROVEEDOR", value=st.session_state.nombre_prov)
         monto = st.number_input("MONTO", min_value=0.0, format="%.2f")
         estado = st.selectbox("ESTADO", ["Pendiente", "Aprobado", "Rechazado", "Pagado"])
         
@@ -68,23 +85,20 @@ if menu == "Compras":
     if not df_compras.empty:
         st.dataframe(df_compras, use_container_width=True)
     else:
-        st.info("No hay registros todavía o verifica la URL de la API.")
+        st.info("No hay registros todavía o verifica la conexión.")
 
 # ==========================================
-# 2. SECCIÓN FACTURAS (Desde Columna G en adelante)
+# 2. SECCIÓN FACTURAS
 # ==========================================
 elif menu == "Facturas":
     st.header("📄 Gestión de Facturas")
-    
     df_compras = obtener_datos("COMPRAS")
-
     if not df_compras.empty and "NUMERO ORDEN DE COMPRAS" in df_compras.columns:
         lista_ordenes = df_compras["NUMERO ORDEN DE COMPRAS"].astype(str).tolist()
         n_orden_buscar = st.selectbox("Seleccione el N° de Orden de Compra:", [""] + lista_ordenes)
         
         if n_orden_buscar and n_orden_buscar != "":
             datos_orden = df_compras[df_compras["NUMERO ORDEN DE COMPRAS"].astype(str) == n_orden_buscar].iloc[0]
-            
             st.info("Datos recuperados de la Orden de Compra:")
             col1, col2, col3 = st.columns(3)
             col1.write(f"**Proveedor:** {datos_orden.get('PROVEEDOR', '')}")
@@ -99,29 +113,22 @@ elif menu == "Facturas":
                 col_j = st.text_input("Observaciones / Detalles")
                 
                 submit_factura = st.form_submit_button("Guardar Datos de Factura")
-                
                 if submit_factura:
-                    valores_factura = [n_orden_buscar, str(col_g), str(col_h), col_i, col_j]
-                    guardar_fila("FACTURAS", valores_factura)
-                    st.success("¡Datos de factura guardados correctamente en la hoja!")
-    else:
-        st.warning("No se pudieron cargar las órdenes de compra.")
+                    guardar_fila("FACTURAS", [n_orden_buscar, str(col_g), str(col_h), col_i, col_j])
+                    st.success("¡Datos de factura guardados correctamente!")
 
 # ==========================================
-# 3. SECCIÓN TESORERÍA (Desde Columna K en adelante)
+# 3. SECCIÓN TESORERÍA
 # ==========================================
 elif menu == "Tesorería":
     st.header("💰 Gestión de Tesorería")
-    
     df_compras = obtener_datos("COMPRAS")
-
     if not df_compras.empty and "NUMERO ORDEN DE COMPRAS" in df_compras.columns:
         lista_ordenes = df_compras["NUMERO ORDEN DE COMPRAS"].astype(str).tolist()
         n_orden_teso = st.selectbox("Seleccione el N° de Orden de Compra para Tesorería:", [""] + lista_ordenes)
         
         if n_orden_teso and n_orden_teso != "":
             datos_orden = df_compras[df_compras["NUMERO ORDEN DE COMPRAS"].astype(str) == n_orden_teso].iloc[0]
-            
             st.info("Datos de referencia de la Compra:")
             st.write(f"**Proveedor:** {datos_orden.get('PROVEEDOR', '')} | **Monto:** {datos_orden.get('MONTO', '')}")
             
@@ -133,10 +140,6 @@ elif menu == "Tesorería":
                 col_n = st.text_input("Comprobante / Detalle")
                 
                 submit_teso = st.form_submit_button("Guardar Datos de Tesorería")
-                
                 if submit_teso:
-                    valores_tesoreria = [n_orden_teso, str(col_k), col_l, col_m, col_n]
-                    guardar_fila("TESORERIA", valores_tesoreria)
-                    st.success("¡Datos de tesorería guardados correctamente en la hoja!")
-    else:
-        st.warning("No hay órdenes de compra disponibles para asociar en tesorería.")
+                    guardar_fila("TESORERIA", [n_orden_teso, str(col_k), col_l, col_m, col_n])
+                    st.success("¡Datos de tesorería guardados correctamente!")
