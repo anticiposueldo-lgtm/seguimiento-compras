@@ -103,7 +103,8 @@ if menu == "Compras":
         
         with col_mod:
             if st.button("✏️ Modificar Registro Existente"):
-                valores = [n_orden, str(fecha), n_proveedor, proveedor, monto, estado]
+                # Asegurar que el orden de los valores coincida exactamente con las columnas de Google Sheets
+                valores = [str(n_orden), str(fecha), str(n_proveedor), str(proveedor), float(monto), str(estado)]
                 res = actualizar_fila("COMPRAS", valores)
                 if res and res.get("status") == "updated":
                     st.success(f"¡Orden N° {n_orden} modificada correctamente!")
