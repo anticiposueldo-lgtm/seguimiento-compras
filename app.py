@@ -180,7 +180,6 @@ elif menu == "Tesorería":
     df_tesoreria = obtener_datos("TESORERIA")
     
     if not df_facturas.empty:
-        # Identificamos la columna de Orden de Compra en Facturas
         col_oc_facturas = next((c for c in df_facturas.columns if "ORDEN" in c.upper()), df_facturas.columns[0])
         lista_ordenes = df_facturas[col_oc_facturas].astype(str).unique().tolist()
         n_orden_teso = st.selectbox("Seleccione el N° de Orden de Compra para Tesorería:", [""] + lista_ordenes)
@@ -190,9 +189,10 @@ elif menu == "Tesorería":
             
             facturas_pendientes = []
             for _, fac in facturas_orden.iterrows():
-                # Buscamos de forma inteligente la columna de N° de Factura y la de Monto Factura por sus nombres exactos
+                # Buscamos el N° de Factura (columna que contenga FACTURA pero no MONTO FACTURA)
                 col_n_fac = next((c for c in fac.index if "FACTURA" in c.upper() and c.upper() != "MONTO FACTURA"), None)
-                col_monto_fac = next((c for c in fac.index if "MONTO FACTURA" in c.upper()), None)
+                # Buscamos el Monto Total de la Factura de forma exacta (Columna I)
+                col_monto_fac = next((c for c in fac.index if "MONTO FACTURA" in c.upper() or "MONTO" in c.upper()), fac.index[8] if len(fac.index) > 8 else None)
                 
                 n_fac = str(fac.get(col_n_fac, "")) if col_n_fac else ""
                 
@@ -207,7 +207,6 @@ elif menu == "Tesorería":
                 total_pagado_acumulado = 0.0
                 
                 if not df_tesoreria.empty and n_fac:
-                    # En tesorería buscamos la columna del número de factura y la del monto pagado
                     col_fac_teso = next((c for c in df_tesoreria.columns if "FACTURA" in c.upper() and c.upper() != "MONTO FACTURA"), None)
                     col_pago_teso = next((c for c in df_tesoreria.columns if "PAGO" in c.upper() or "MONTO PAGADO" in c.upper()), None)
                     
@@ -239,7 +238,6 @@ elif menu == "Tesorería":
                     
                     monto_fac_val = datos_factura.get("_MONTO_REAL", 0.0)
                     
-                    # Sumamos los pagos previos en Tesorería para esta factura
                     monto_pagado_previo = 0.0
                     if not df_tesoreria.empty:
                         col_fac_teso = next((c for c in df_tesoreria.columns if "FACTURA" in c.upper() and c.upper() != "MONTO FACTURA"), None)
@@ -257,7 +255,6 @@ elif menu == "Tesorería":
                     if monto_restante < 0:
                         monto_restante = 0.0
                     
-                    # Buscamos el nombre del proveedor de forma segura
                     col_prov = next((c for c in datos_factura.keys() if "PROVEEDOR" in c.upper() and c.upper() != "N PROVEEDOR"), None)
                     proveedor_nombre = str(datos_factura.get(col_prov, "")) if col_prov else ""
                     
@@ -279,7 +276,6 @@ elif menu == "Tesorería":
                         
                         submit_teso = st.form_submit_button("Guardar Datos de Tesorería")
                         if submit_submit := submit_teso:
-                            # Recogemos las columnas en orden para guardar en Tesorería
                             c_orden = str(datos_factura.get(col_oc_facturas, ""))
                             c_fecha = str(datos_factura.get("FECHA", ""))
                             c_n_prov = str(datos_factura.get("N PROVEEDOR", ""))
@@ -288,7 +284,7 @@ elif menu == "Tesorería":
                             c_estado = str(datos_factura.get("ESTADO", ""))
                             c_n_fac = str(n_factura_seleccionada)
                             c_f_comp = str(datos_factura.get("FECHA DE COMPROBANTE", ""))
-                            c_m_fac = float(monto_fac_val) # Columna E
+                            c_m_fac = float(monto_fac_val) # Columna E (Monto de la Factura)
                             c_f_venc = str(datos_factura.get("FECHA DE VENCIMIENTO", ""))
                             
                             valores_teso = [
