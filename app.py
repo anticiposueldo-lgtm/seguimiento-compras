@@ -140,7 +140,8 @@ elif menu == "Facturas":
             col2.write(f"**Monto Compra:** {datos_orden.get('MONTO', '')}")
             col3.write(f"**Estado Actual:** {datos_orden.get('ESTADO', '')}")
             
-            with st.form("form_facturas"):
+            # clear_on_submit=True limpia automáticamente las celdas tras hacer submit
+            with st.form("form_facturas", clear_on_submit=True):
                 st.subheader("Completar datos de Facturación (Columnas G a J) y Estado")
                 n_factura = st.text_input("N° de Factura")
                 fecha_comprobante = st.date_input("Fecha de Comprobante")
@@ -151,23 +152,21 @@ elif menu == "Facturas":
                 
                 submit_factura = st.form_submit_button("Guardar Datos de Factura")
                 if submit_factura:
-                    # Columnas A a F extraídas de compras + Columnas G a J de factura
                     valores_fila = [
                         str(datos_orden.get("NUMERO ORDEN DE COMPRAS", "")),
                         str(datos_orden.get("FECHA", "")),
                         str(datos_orden.get("N PROVEEDOR", "")),
                         str(datos_orden.get("PROVEEDOR", "")),
                         float(datos_orden.get("MONTO", 0.0)),
-                        str(nuevo_estado_compra), # Actualiza el estado reflejado en Facturas (Columna F)
-                        str(n_factura),           # Columna G
-                        str(fecha_comprobante),   # Columna H
-                        float(monto_factura),     # Columna I
-                        str(fecha_vencimiento)    # Columna J
+                        str(nuevo_estado_compra), 
+                        str(n_factura),           
+                        str(fecha_comprobante),   
+                        float(monto_factura),     
+                        str(fecha_vencimiento)    
                     ]
                     
                     guardar_fila("FACTURAS", valores_fila, n_orden=n_orden_buscar, nuevo_estado=nuevo_estado_compra)
                     st.success("¡Datos de factura guardados y estado de compra actualizado correctamente!")
-                    st.rerun()
 
 # ==========================================
 # 3. SECCIÓN TESORERÍA
@@ -186,7 +185,8 @@ elif menu == "Tesorería":
             st.info("Datos de referencia (Arrastrados desde Facturas):")
             st.write(f"**Proveedor:** {datos_factura.get('PROVEEDOR', '')} | **N° Factura:** {datos_factura.get('N FACTURA', '')} | **Monto Factura:** {datos_factura.get('MONTO', '')}")
             
-            with st.form("form_tesoreria"):
+            # clear_on_submit=True limpia automáticamente los campos de pago tras guardar
+            with st.form("form_tesoreria", clear_on_submit=True):
                 st.subheader("Completar datos de Pago (A partir de la Columna K)")
                 fecha_pago = st.date_input("Fecha de Pago")
                 n_orden_pago = st.text_input("N° Orden de Pago")
@@ -195,7 +195,6 @@ elif menu == "Tesorería":
                 
                 submit_teso = st.form_submit_button("Guardar Datos de Tesorería")
                 if submit_teso:
-                    # Copiamos todos los datos de la fila de factura (Columnas A a J) y agregamos los de tesorería (K en adelante)
                     valores_teso = [
                         str(datos_factura.get("NUMERO ORDEN DE COMPRAS", "")),
                         str(datos_factura.get("FECHA", "")),
@@ -207,12 +206,11 @@ elif menu == "Tesorería":
                         str(datos_factura.get("FECHA DE COMPROBANTE", "")),
                         float(datos_factura.get("MONTO FACTURA", 0.0) if "MONTO FACTURA" in datos_factura and pd.notnull(datos_factura.get("MONTO FACTURA")) else 0.0),
                         str(datos_factura.get("FECHA DE VENCIMIENTO", "")),
-                        str(fecha_pago),         # Columna K
-                        str(n_orden_pago),       # Columna L
-                        str(medio_pago),         # Columna M
-                        str(fecha_debito_cheque) # Columna N
+                        str(fecha_pago),         
+                        str(n_orden_pago),       
+                        str(medio_pago),         
+                        str(fecha_debito_cheque) 
                     ]
                     
                     guardar_fila("TESORERIA", valores_teso)
                     st.success("¡Datos de tesorería guardados encadenadamente de forma exitosa!")
-                    st.rerun()
