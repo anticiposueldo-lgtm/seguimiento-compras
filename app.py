@@ -137,7 +137,12 @@ elif menu == "Facturas":
             st.info("Datos recuperados de la Orden de Compra:")
             col1, col2, col3 = st.columns(3)
             col1.write(f"**Proveedor:** {datos_orden.get('PROVEEDOR', '')}")
-            col2.write(f"**Monto Compra:** {datos_orden.get('MONTO', '')}")
+            
+            # Formateamos el monto de la compra con separadores de miles y 2 decimales
+            monto_compra_raw = datos_orden.get('MONTO', 0)
+            monto_compra_fmt = f"${float(monto_compra_raw):,.2f}" if pd.notnull(monto_compra_raw) and str(monto_compra_raw) != "" else "$0.00"
+            col2.write(f"**Monto Compra:** {monto_compra_fmt}")
+            
             col3.write(f"**Estado Actual:** {datos_orden.get('ESTADO', '')}")
             
             # clear_on_submit=True limpia automáticamente las celdas tras hacer submit
