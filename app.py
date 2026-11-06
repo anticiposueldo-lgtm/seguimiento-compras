@@ -35,24 +35,14 @@ def guardar_fila(sheet_name, values):
         st.error(f"Error al guardar: {e}")
         return None
 
-def actualizar_fila(sheet_name, values):
-  try:
-    payload = {"action": "updateRow", "sheet": sheet_name, "values": values}
-    response = requests.post(WEB_APP_URL, json=payload)
-    return response.json()
-  except Exception as e:
-    st.error(f"Error al actualizar: {e}")
-    return None
-
-
 def eliminar_fila(sheet_name, orden):
-  try:
-    url = f"{WEB_APP_URL}?action=deleteRow&orden={orden}"
-    response = requests.get(url)
-    return response.json()
-  except Exception as e:
-    st.error(f"Error al eliminar: {e}")
-    return None
+    try:
+        payload = {"action": "deleteRow", "sheet": sheet_name, "orden": orden}
+        response = requests.post(WEB_APP_URL, json=payload)
+        return response.json()
+    except Exception as e:
+        st.error(f"Error al eliminar: {e}")
+        return None
 
 menu = st.sidebar.selectbox("Seleccionar Sección", ["Compras", "Facturas", "Tesorería"])
 
@@ -71,21 +61,17 @@ if menu == "Compras":
 
     n_orden = st.text_input("NUMERO ORDEN DE COMPRAS", key="input_n_orden")
     
-    # Consultamos si la orden ya existe para precargar datos si es necesario
+    # Consultamos si la orden ya existe
     df_compras_actual = obtener_datos("COMPRAS")
-    orden_existente_datos = None
+    orden_existe = False
     
     if n_orden and not df_compras_actual.empty and "NUMERO ORDEN DE COMPRAS" in df_compras_actual.columns:
         match = df_compras_actual[df_compras_actual["NUMERO ORDEN DE COMPRAS"].astype(str).str.strip() == str(n_orden).strip()]
         if not match.empty:
-            orden_existente_datos = match.iloc[0]
-
-    # Valores por defecto (si existe la orden, toma los de la hoja; si no, vacíos)
-    default_n_prov = str(orden_existente_datos.get("N PROVEEDOR", "")) if orden_existente_datos is not None else ""
-    default_monto = float(orden_existente_datos.get("MONTO", 0.0)) if orden_existente_datos is not None else 0.0
+            orden_existe = True
 
     fecha = st.date_input("FECHA")
-    n_proveedor = st.text_input("N PROVEEDOR", value=default_n_prov)
+    n_proveedor = st.text_input("N PROVEEDOR", key="input_n_proveedor")
     
     nombre_proveedor_auto = ""
     if n_proveedor:
@@ -94,43 +80,32 @@ if menu == "Compras":
             nombre_proveedor_auto = "PROVEEDOR NO ENCONTRADO"
 
     proveedor = st.text_input("PROVEEDOR", value=nombre_proveedor_auto)
-    monto = st.number_input("MONTO", min_value=0.0, format="%.2f", value=default_monto)
+    monto = st.number_input("MONTO", min_value=0.0, format="%.2f", key="input_monto")
     estado = st.selectbox("ESTADO", ["Pendiente", "Aprobado", "Rechazado", "Pagado"])
 
-    if orden_existente_datos is not None:
-        st.warning(f"⚠️ La Orden N° **{n_orden}** ya se encuentra registrada. Puedes modificar sus datos o eliminarla:")
+    if orden_existe:
+        st.warning(f"⚠️ La Orden N° **{n_orden}** ya se encuentra registrada.")
         
-        col_mod, col_del = st.columns(2)
-        
-        with col_mod:
-            if st.button("✏️ Modificar Registro Existente"):
-                # Asegurar que el orden de los valores coincida exactamente con las columnas de Google Sheets
-                valores = [str(n_orden), str(fecha), str(n_proveedor), str(proveedor), float(monto), str(estado)]
-                res = actualizar_fila("COMPRAS", valores)
-                if res and res.get("status") == "updated":
-                    st.success(f"¡Orden N° {n_orden} modificada correctamente!")
-                    st.session_state.input_n_orden = ""
-                    st.rerun()
-                else:
-                    st.error("No se pudo actualizar el registro en la hoja.")
-                    
-        with col_del:
-            if st.button("🗑️ Eliminar Registro"):
-                res = eliminar_fila("COMPRAS", str(n_orden))
-                if res and res.get("status") == "deleted":
-                    st.success(f"¡Orden N° {n_orden} eliminada correctamente!")
-                    st.session_state.input_n_orden = ""
-                    st.rerun()
-                else:
-                    st.error("No se pudo eliminar el registro de la hoja.")
+        if st.button("🗑️ Eliminar Registro Existente"):
+            res = eliminar_fila("COMPRAS", str(n_orden))
+            if res and res.get("status") == "deleted":
+                st.success(f"¡Orden N° {n_orden} eliminada correctamente!")
+                st.session_state.input_n_orden = ""
+                st.session_state.input_n_proveedor = ""
+                st.session_state.input_monto = 0.0
+                st.rerun()
+            else:
+                st.error("No se pudo eliminar el registro de la hoja.")
     else:
         if st.button("Guardar Orden de Compra"):
             if n_orden:
-                valores = [n_orden, str(fecha), n_proveedor, proveedor, monto, estado]
+                valores = [str(n_orden), str(fecha), str(n_proveedor), str(proveedor), float(monto), str(estado)]
                 resultado = guardar_fila("COMPRAS", valores)
                 if resultado:
                     st.success(f"¡Orden de Compra {n_orden} guardada exitosamente!")
                     st.session_state.input_n_orden = ""
+                    st.session_state.input_n_proveedor = ""
+                    st.session_state.input_monto = 0.0
                     st.rerun()
             else:
                 st.warning("Por favor completa al menos el Número de Orden de Compras.")
