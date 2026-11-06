@@ -43,34 +43,32 @@ menu = st.sidebar.selectbox("Seleccionar Sección", ["Compras", "Facturas", "Tes
 if menu == "Compras":
     st.header("📝 Registro de Órdenes de Compra")
     
-    with st.form("form_compras"):
-        n_orden = st.text_input("NUMERO ORDEN DE COMPRAS")
-        fecha = st.date_input("FECHA")
-        
-        # Campo de N° Proveedor (al cambiar y presionar Enter o salir del campo, busca solo)
-        n_proveedor = st.text_input("N PROVEEDOR")
-        
-        # Buscamos automáticamente si se ingresó un código
-        nombre_proveedor_auto = ""
-        if n_proveedor:
-            nombre_proveedor_auto = buscar_proveedor(n_proveedor)
-            if not nombre_proveedor_auto:
-                nombre_proveedor_auto = "PROVEEDOR NO ENCONTRADO"
+    n_orden = st.text_input("NUMERO ORDEN DE COMPRAS")
+    fecha = st.date_input("FECHA")
+    
+    # Campo de N° Proveedor
+    n_proveedor = st.text_input("N PROVEEDOR")
+    
+    # Buscamos automáticamente si se ingresó un código alfanumérico o numérico
+    nombre_proveedor_auto = ""
+    if n_proveedor:
+        nombre_proveedor_auto = buscar_proveedor(n_proveedor)
+        if not nombre_proveedor_auto:
+            nombre_proveedor_auto = "PROVEEDOR NO ENCONTRADO"
 
-        proveedor = st.text_input("PROVEEDOR", value=nombre_proveedor_auto)
-        monto = st.number_input("MONTO", min_value=0.0, format="%.2f")
-        estado = st.selectbox("ESTADO", ["Pendiente", "Aprobado", "Rechazado", "Pagado"])
-        
-        submit_compra = st.form_submit_button("Guardar Orden de Compra")
-        
-        if submit_compra:
-            if n_orden:
-                valores = [n_orden, str(fecha), n_proveedor, proveedor, monto, estado]
-                resultado = guardar_fila("COMPRAS", valores)
-                if resultado:
-                    st.success(f"¡Orden de Compra {n_orden} guardada exitosamente!")
-            else:
-                st.warning("Por favor completa al menos el Número de Orden de Compras.")
+    proveedor = st.text_input("PROVEEDOR", value=nombre_proveedor_auto)
+    monto = st.number_input("MONTO", min_value=0.0, format="%.2f")
+    estado = st.selectbox("ESTADO", ["Pendiente", "Aprobado", "Rechazado", "Pagado"])
+    
+    # Botón independiente (sin form), se ejecuta solo al hacer clic
+    if st.button("Guardar Orden de Compra"):
+        if n_orden:
+            valores = [n_orden, str(fecha), n_proveedor, proveedor, monto, estado]
+            resultado = guardar_fila("COMPRAS", valores)
+            if resultado:
+                st.success(f"¡Orden de Compra {n_orden} guardada exitosamente!")
+        else:
+                    st.warning("Por favor completa al menos el Número de Orden de Compras.")
 
     st.subheader("📋 Registros Actuales en Compras")
     df_compras = obtener_datos("COMPRAS")
