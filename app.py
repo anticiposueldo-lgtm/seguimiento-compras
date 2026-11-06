@@ -94,4 +94,49 @@ elif menu == "Facturas":
             with st.form("form_facturas"):
                 st.subheader("Completar datos de Facturación (Desde Columna G)")
                 col_g = st.text_input("N° de Factura")
-                col_h = st.date_input("
+                col_h = st.date_input("Fecha de Comprobante")
+                col_i = st.number_input("Monto Factura", min_value=0.0, format="%.2f")
+                col_j = st.text_input("Observaciones / Detalles")
+                
+                submit_factura = st.form_submit_button("Guardar Datos de Factura")
+                
+                if submit_factura:
+                    valores_factura = [n_orden_buscar, str(col_g), str(col_h), col_i, col_j]
+                    guardar_fila("FACTURAS", valores_factura)
+                    st.success("¡Datos de factura guardados correctamente en la hoja!")
+    else:
+        st.warning("No se pudieron cargar las órdenes de compra.")
+
+# ==========================================
+# 3. SECCIÓN TESORERÍA (Desde Columna K en adelante)
+# ==========================================
+elif menu == "Tesorería":
+    st.header("💰 Gestión de Tesorería")
+    
+    df_compras = obtener_datos("COMPRAS")
+
+    if not df_compras.empty and "NUMERO ORDEN DE COMPRAS" in df_compras.columns:
+        lista_ordenes = df_compras["NUMERO ORDEN DE COMPRAS"].astype(str).tolist()
+        n_orden_teso = st.selectbox("Seleccione el N° de Orden de Compra para Tesorería:", [""] + lista_ordenes)
+        
+        if n_orden_teso and n_orden_teso != "":
+            datos_orden = df_compras[df_compras["NUMERO ORDEN DE COMPRAS"].astype(str) == n_orden_teso].iloc[0]
+            
+            st.info("Datos de referencia de la Compra:")
+            st.write(f"**Proveedor:** {datos_orden.get('PROVEEDOR', '')} | **Monto:** {datos_orden.get('MONTO', '')}")
+            
+            with st.form("form_tesoreria"):
+                st.subheader("Completar datos de Pago (Desde Columna K)")
+                col_k = st.date_input("Fecha de Pago")
+                col_l = st.text_input("N° Orden de Pago")
+                col_m = st.selectbox("Medio de Pago", ["Transferencia", "Cheque", "Efectivo"])
+                col_n = st.text_input("Comprobante / Detalle")
+                
+                submit_teso = st.form_submit_button("Guardar Datos de Tesorería")
+                
+                if submit_teso:
+                    valores_tesoreria = [n_orden_teso, str(col_k), col_l, col_m, col_n]
+                    guardar_fila("TESORERIA", valores_tesoreria)
+                    st.success("¡Datos de tesorería guardados correctamente en la hoja!")
+    else:
+        st.warning("No hay órdenes de compra disponibles para asociar en tesorería.")
