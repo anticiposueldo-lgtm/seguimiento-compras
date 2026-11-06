@@ -179,35 +179,37 @@ elif menu == "Tesorería":
     df_facturas = obtener_datos("FACTURAS")
     df_tesoreria = obtener_datos("TESORERIA")
     
-    if not df_facturas.empty and "NUMERO ORDEN DE COMPRAS" in df_facturas.columns:
-        df_val_teso = df_facturas[df_facturas["PROVEEDOR"].astype(str) != "ANULADO"]
-        lista_ordenes = df_val_teso["NUMERO ORDEN DE COMPRAS"].astype(str).unique().tolist()
+    if not df_facturas.empty:
+        # Identificamos la columna de Orden de Compra en Facturas
+        col_oc_facturas = next((c for c in df_facturas.columns if "ORDEN" in c.upper()), df_facturas.columns[0])
+        lista_ordenes = df_facturas[col_oc_facturas].astype(str).unique().tolist()
         n_orden_teso = st.selectbox("Seleccione el N° de Orden de Compra para Tesorería:", [""] + lista_ordenes)
         
         if n_orden_teso and n_orden_teso != "":
-            facturas_orden = df_val_teso[df_val_teso["NUMERO ORDEN DE COMPRAS"].astype(str) == n_orden_teso]
+            facturas_orden = df_facturas[df_facturas[col_oc_facturas].astype(str) == n_orden_teso]
             
             facturas_pendientes = []
             for _, fac in facturas_orden.iterrows():
-                # En la hoja Facturas, buscamos la columna del número de factura de forma segura (suele ser la 7ma columna o columna G)
-                col_n_fac_facturas = next((c for c in fac.index if "FACTURA" in c.upper() and c.upper() != "MONTO FACTURA"), fac.index[6] if len(fac.index) > 6 else None)
-                n_fac = str(fac.get(col_n_fac_facturas, "")) if col_n_fac_facturas else ""
+                # Buscamos de forma inteligente la columna de N° de Factura y la de Monto Factura por sus nombres exactos
+                col_n_fac = next((c for c in fac.index if "FACTURA" in c.upper() and c.upper() != "MONTO FACTURA"), None)
+                col_monto_fac = next((c for c in fac.index if "MONTO FACTURA" in c.upper()), None)
                 
-                # Buscamos el monto total de la factura de forma segura (columna I o que contenga MONTO FACTURA)
-                col_monto_facturas = next((c for c in fac.index if "MONTO FACTURA" in c.upper()), fac.index[8] if len(fac.index) > 8 else None)
+                n_fac = str(fac.get(col_n_fac, "")) if col_n_fac else ""
+                
                 monto_f_total = 0.0
-                if col_monto_facturas:
+                if col_monto_fac:
                     try:
-                        monto_f_total = float(fac.get(col_monto_facturas, 0.0))
+                        monto_f_total = float(fac.get(col_monto_fac, 0.0))
                     except:
-                        pass
+                        monto_f_total = 0.0
                 
                 pagada_total = False
                 total_pagado_acumulado = 0.0
                 
                 if not df_tesoreria.empty and n_fac:
-                    col_fac_teso = df_tesoreria.columns[6] if len(df_tesoreria.columns) > 6 else None
-                    col_pago_teso = df_tesoreria.columns[8] if len(df_tesoreria.columns) > 8 else None # Columna I
+                    # En tesorería buscamos la columna del número de factura y la del monto pagado
+                    col_fac_teso = next((c for c in df_tesoreria.columns if "FACTURA" in c.upper() and c.upper() != "MONTO FACTURA"), None)
+                    col_pago_teso = next((c for c in df_tesoreria.columns if "PAGO" in c.upper() or "MONTO PAGADO" in c.upper()), None)
                     
                     if col_fac_teso and col_pago_teso:
                         pagos_fac = df_tesoreria[df_tesoreria[col_fac_teso].astype(str) == n_fac]
@@ -220,8 +222,7 @@ elif menu == "Tesorería":
                 if monto_f_total > 0 and total_pagado_acumulado >= monto_f_total:
                     pagada_total = True
                 
-                if not pagada_total:
-                    # Guardamos el objeto factura junto con su monto total real ya parseado
+                if not pagada_total and n_fac:
                     fac_dict = fac.to_dict()
                     fac_dict["_MONTO_REAL"] = monto_f_total
                     fac_dict["_N_FAC_REAL"] = n_fac
@@ -238,11 +239,11 @@ elif menu == "Tesorería":
                     
                     monto_fac_val = datos_factura.get("_MONTO_REAL", 0.0)
                     
-                    # Sumamos los pagos previos de la Columna I en Tesorería
+                    # Sumamos los pagos previos en Tesorería para esta factura
                     monto_pagado_previo = 0.0
                     if not df_tesoreria.empty:
-                        col_fac_teso = df_tesoreria.columns[6] if len(df_tesoreria.columns) > 6 else None
-                        col_pago_teso = df_tesoreria.columns[8] if len(df_tesoreria.columns) > 8 else None
+                        col_fac_teso = next((c for c in df_tesoreria.columns if "FACTURA" in c.upper() and c.upper() != "MONTO FACTURA"), None)
+                        col_pago_teso = next((c for c in df_tesoreria.columns if "PAGO" in c.upper() or "MONTO PAGADO" in c.upper()), None)
                         
                         if col_fac_teso and col_pago_teso:
                             pagos_previos = df_tesoreria[df_tesoreria[col_fac_teso].astype(str) == n_factura_seleccionada]
@@ -256,7 +257,11 @@ elif menu == "Tesorería":
                     if monto_restante < 0:
                         monto_restante = 0.0
                     
-                    st.info(f"**Proveedor:** {datos_factura.get('PROVEEDOR', '')} | **Monto Total Factura:** ${monto_fac_val:,.2f}")
+                    # Buscamos el nombre del proveedor de forma segura
+                    col_prov = next((c for c in datos_factura.keys() if "PROVEEDOR" in c.upper() and c.upper() != "N PROVEEDOR"), None)
+                    proveedor_nombre = str(datos_factura.get(col_prov, "")) if col_prov else ""
+                    
+                    st.info(f"**Proveedor:** {proveedor_nombre} | **Monto Total Factura:** ${monto_fac_val:,.2f}")
                     if monto_pagado_previo > 0:
                         st.warning(f"⚠️ Esta factura ya tiene pagos parciales registrados por un total de **${monto_pagado_previo:,.2f}**.")
                     
@@ -274,21 +279,22 @@ elif menu == "Tesorería":
                         
                         submit_teso = st.form_submit_button("Guardar Datos de Tesorería")
                         if submit_submit := submit_teso:
+                            # Recogemos las columnas en orden para guardar en Tesorería
+                            c_orden = str(datos_factura.get(col_oc_facturas, ""))
+                            c_fecha = str(datos_factura.get("FECHA", ""))
+                            c_n_prov = str(datos_factura.get("N PROVEEDOR", ""))
+                            c_prov = str(proveedor_nombre)
+                            c_monto_oc = float(datos_factura.get("MONTO", 0.0) if pd.notnull(datos_factura.get("MONTO")) else 0.0)
+                            c_estado = str(datos_factura.get("ESTADO", ""))
+                            c_n_fac = str(n_factura_seleccionada)
+                            c_f_comp = str(datos_factura.get("FECHA DE COMPROBANTE", ""))
+                            c_m_fac = float(monto_fac_val) # Columna E
+                            c_f_venc = str(datos_factura.get("FECHA DE VENCIMIENTO", ""))
+                            
                             valores_teso = [
-                                str(datos_factura.get("NUMERO ORDEN DE COMPRAS", "")),
-                                str(datos_factura.get("FECHA", "")),
-                                str(datos_factura.get("N PROVEEDOR", "")),
-                                str(datos_factura.get("PROVEEDOR", "")),
-                                float(monto_fac_val),    # Columna E (Monto de la Factura)
-                                str(datos_factura.get("ESTADO", "")),
-                                str(n_factura_seleccionada), # Columna G (N° Factura)
-                                str(datos_factura.get("FECHA DE COMPROBANTE", "")),
-                                float(monto_a_pagar),    # Columna I (Monto Pagado en esta operación)
-                                str(datos_factura.get("FECHA DE VENCIMIENTO", "")),
-                                str(fecha_pago),         
-                                str(n_orden_pago),       
-                                str(medio_pago),         
-                                str(fecha_debito_cheque) 
+                                c_orden, c_fecha, c_n_prov, c_prov, c_monto_oc, c_estado,
+                                c_n_fac, c_f_comp, c_m_fac, c_f_venc,
+                                str(fecha_pago), str(n_orden_pago), str(medio_pago), str(fecha_debito_cheque)
                             ]
                             
                             guardar_fila("TESORERIA", valores_teso)
