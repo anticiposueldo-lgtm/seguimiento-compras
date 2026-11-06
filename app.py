@@ -69,21 +69,8 @@ if menu == "Compras":
         st.session_state.input_monto = 0.0
 
     n_orden = st.text_input("NUMERO ORDEN DE COMPRAS", key="input_n_orden")
-    fecha = st.date_input("FECHA")
     
-    n_proveedor = st.text_input("N PROVEEDOR", key="input_n_proveedor")
-    
-    nombre_proveedor_auto = ""
-    if n_proveedor:
-        nombre_proveedor_auto = buscar_proveedor(n_proveedor)
-        if not nombre_proveedor_auto:
-            nombre_proveedor_auto = "PROVEEDOR NO ENCONTRADO"
-
-    proveedor = st.text_input("PROVEEDOR", value=nombre_proveedor_auto)
-    monto = st.number_input("MONTO", min_value=0.0, format="%.2f", key="input_monto")
-    estado = st.selectbox("ESTADO", ["Pendiente", "Aprobado", "Rechazado", "Pagado"])
-    
-    # Verificamos si la orden ya existe en la hoja COMPRAS
+    # Consultamos si la orden ya existe para precargar datos si es necesario
     df_compras_actual = obtener_datos("COMPRAS")
     orden_existente_datos = None
     
@@ -92,8 +79,25 @@ if menu == "Compras":
         if not match.empty:
             orden_existente_datos = match.iloc[0]
 
+    # Valores por defecto (si existe la orden, toma los de la hoja; si no, vacíos)
+    default_n_prov = str(orden_existente_datos.get("N PROVEEDOR", "")) if orden_existente_datos is not None else ""
+    default_monto = float(orden_existente_datos.get("MONTO", 0.0)) if orden_existente_datos is not None else 0.0
+
+    fecha = st.date_input("FECHA")
+    n_proveedor = st.text_input("N PROVEEDOR", value=default_n_prov)
+    
+    nombre_proveedor_auto = ""
+    if n_proveedor:
+        nombre_proveedor_auto = buscar_proveedor(n_proveedor)
+        if not nombre_proveedor_auto:
+            nombre_proveedor_auto = "PROVEEDOR NO ENCONTRADO"
+
+    proveedor = st.text_input("PROVEEDOR", value=nombre_proveedor_auto)
+    monto = st.number_input("MONTO", min_value=0.0, format="%.2f", value=default_monto)
+    estado = st.selectbox("ESTADO", ["Pendiente", "Aprobado", "Rechazado", "Pagado"])
+
     if orden_existente_datos is not None:
-        st.warning(f"⚠️ La Orden N° **{n_orden}** ya se encuentra registrada.")
+        st.warning(f"⚠️ La Orden N° **{n_orden}** ya se encuentra registrada. Puedes modificar sus datos o eliminarla:")
         
         col_mod, col_del = st.columns(2)
         
@@ -101,22 +105,22 @@ if menu == "Compras":
             if st.button("✏️ Modificar Registro Existente"):
                 valores = [n_orden, str(fecha), n_proveedor, proveedor, monto, estado]
                 res = actualizar_fila("COMPRAS", valores)
-                if res:
+                if res and res.get("status") == "updated":
                     st.success(f"¡Orden N° {n_orden} modificada correctamente!")
                     st.session_state.input_n_orden = ""
-                    st.session_state.input_n_proveedor = ""
-                    st.session_state.input_monto = 0.0
                     st.rerun()
+                else:
+                    st.error("No se pudo actualizar el registro en la hoja.")
                     
         with col_del:
             if st.button("🗑️ Eliminar Registro"):
                 res = eliminar_fila("COMPRAS", str(n_orden))
-                if res:
+                if res and res.get("status") == "deleted":
                     st.success(f"¡Orden N° {n_orden} eliminada correctamente!")
                     st.session_state.input_n_orden = ""
-                    st.session_state.input_n_proveedor = ""
-                    st.session_state.input_monto = 0.0
                     st.rerun()
+                else:
+                    st.error("No se pudo eliminar el registro de la hoja.")
     else:
         if st.button("Guardar Orden de Compra"):
             if n_orden:
@@ -125,8 +129,6 @@ if menu == "Compras":
                 if resultado:
                     st.success(f"¡Orden de Compra {n_orden} guardada exitosamente!")
                     st.session_state.input_n_orden = ""
-                    st.session_state.input_n_proveedor = ""
-                    st.session_state.input_monto = 0.0
                     st.rerun()
             else:
                 st.warning("Por favor completa al menos el Número de Orden de Compras.")
