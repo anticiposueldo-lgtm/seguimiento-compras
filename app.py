@@ -35,14 +35,10 @@ def guardar_fila(sheet_name, values):
         st.error(f"Error al guardar: {e}")
         return None
 
-def actualizar_fila(
-    n_orden, fecha, n_proveedor, proveedor, monto, estado
-):
+def actualizar_fila(sheet_name, values):
   try:
-    url = (
-        f"{WEB_APP_URL}?action=updateRow&nOrden={n_orden}&fecha={fecha}&nProveedor={n_proveedor}&proveedor={urllib.parse.quote(proveedor)}&monto={monto}&estado={estado}"
-    )
-    response = requests.get(url)
+    payload = {"action": "updateRow", "sheet": sheet_name, "values": values}
+    response = requests.post(WEB_APP_URL, json=payload)
     return response.json()
   except Exception as e:
     st.error(f"Error al actualizar: {e}")
