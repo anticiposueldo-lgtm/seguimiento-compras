@@ -50,7 +50,7 @@ def eliminar_fila(sheet_name, orden):
         st.error(f"Error al eliminar: {e}")
         return None
 
-menu = st.sidebar.selectbox("Seleccionar Sección", ["Compras", "Facturas", "Tesorería"])
+menu = st.sidebar.radio("Secciones", ["Compras", "Facturas", "Tesorería"])
 
 # ==========================================
 # 1. SECCIÓN COMPRAS
@@ -138,14 +138,12 @@ elif menu == "Facturas":
             col1, col2, col3 = st.columns(3)
             col1.write(f"**Proveedor:** {datos_orden.get('PROVEEDOR', '')}")
             
-            # Formateamos el monto de la compra con separadores de miles y 2 decimales
             monto_compra_raw = datos_orden.get('MONTO', 0)
             monto_compra_fmt = f"${float(monto_compra_raw):,.2f}" if pd.notnull(monto_compra_raw) and str(monto_compra_raw) != "" else "$0.00"
             col2.write(f"**Monto Compra:** {monto_compra_fmt}")
             
             col3.write(f"**Estado Actual:** {datos_orden.get('ESTADO', '')}")
             
-            # clear_on_submit=True limpia automáticamente las celdas tras hacer submit
             with st.form("form_facturas", clear_on_submit=True):
                 st.subheader("Completar datos de Facturación (Columnas G a J) y Estado")
                 n_factura = st.text_input("N° de Factura")
@@ -179,43 +177,93 @@ elif menu == "Facturas":
 elif menu == "Tesorería":
     st.header("💰 Gestión de Tesorería")
     df_facturas = obtener_datos("FACTURAS")
+    df_tesoreria = obtener_datos("TESORERIA")
     
     if not df_facturas.empty and "NUMERO ORDEN DE COMPRAS" in df_facturas.columns:
         df_val_teso = df_facturas[df_facturas["PROVEEDOR"].astype(str) != "ANULADO"]
-        lista_ordenes = df_val_teso["NUMERO ORDEN DE COMPRAS"].astype(str).tolist()
+        lista_ordenes = df_val_teso["NUMERO ORDEN DE COMPRAS"].astype(str).unique().tolist()
         n_orden_teso = st.selectbox("Seleccione el N° de Orden de Compra para Tesorería:", [""] + lista_ordenes)
         
         if n_orden_teso and n_orden_teso != "":
-            datos_factura = df_val_teso[df_val_teso["NUMERO ORDEN DE COMPRAS"].astype(str) == n_orden_teso].iloc[0]
-            st.info("Datos de referencia (Arrastrados desde Facturas):")
-            st.write(f"**Proveedor:** {datos_factura.get('PROVEEDOR', '')} | **N° Factura:** {datos_factura.get('N FACTURA', '')} | **Monto Factura:** {datos_factura.get('MONTO', '')}")
+            # Filtramos las facturas correspondientes a esta orden de compra
+            facturas_orden = df_val_teso[df_val_teso["NUMERO ORDEN DE COMPRAS"].astype(str) == n_orden_teso]
             
-            # clear_on_submit=True limpia automáticamente los campos de pago tras guardar
-            with st.form("form_tesoreria", clear_on_submit=True):
-                st.subheader("Completar datos de Pago (A partir de la Columna K)")
-                fecha_pago = st.date_input("Fecha de Pago")
-                n_orden_pago = st.text_input("N° Orden de Pago")
-                medio_pago = st.selectbox("Medio de Pago", ["Transferencia", "Cheque", "Efectivo"])
-                fecha_debito_cheque = st.date_input("Fecha Débito / Cheque")
+            # Verificamos qué facturas ya tienen pagos registrados en Tesorería
+            facturas_pendientes = []
+            for _, fac in facturas_orden.iterrows():
+                n_fac = str(fac.get("N FACTURA", ""))
+                # Comprobamos si ya fue pagada totalmente en tesorería (si existe registro con pago total o suma de pagos)
+                pagada_total = False
+                if not df_tesoreria.empty and "N FACTURA" in df_tesoreria.columns:
+                    pagos_fac = df_tesoreria[df_tesoreria["N FACTURA"].astype(str) == n_fac]
+                    for _, p in pagos_fac.iterrows():
+                        if str(p.get("TIPO PAGO", "")) == "Pago Total":
+                            pagada_total = True
                 
-                submit_teso = st.form_submit_button("Guardar Datos de Tesorería")
-                if submit_teso:
-                    valores_teso = [
-                        str(datos_factura.get("NUMERO ORDEN DE COMPRAS", "")),
-                        str(datos_factura.get("FECHA", "")),
-                        str(datos_factura.get("N PROVEEDOR", "")),
-                        str(datos_factura.get("PROVEEDOR", "")),
-                        float(datos_factura.get("MONTO", 0.0) if pd.notnull(datos_factura.get("MONTO")) else 0.0),
-                        str(datos_factura.get("ESTADO", "")),
-                        str(datos_factura.get("N FACTURA", "")),
-                        str(datos_factura.get("FECHA DE COMPROBANTE", "")),
-                        float(datos_factura.get("MONTO FACTURA", 0.0) if "MONTO FACTURA" in datos_factura and pd.notnull(datos_factura.get("MONTO FACTURA")) else 0.0),
-                        str(datos_factura.get("FECHA DE VENCIMIENTO", "")),
-                        str(fecha_pago),         
-                        str(n_orden_pago),       
-                        str(medio_pago),         
-                        str(fecha_debito_cheque) 
-                    ]
+                if not pagada_total:
+                    facturas_pendientes.append(fac)
+            
+            if not facturas_pendientes:
+                st.success("✅ ¡Todas las facturas asociadas a esta Orden de Compra ya han sido pagadas en su totalidad!")
+            else:
+                lista_n_facturas = [str(f.get("N FACTURA", "")) for f in facturas_pendientes]
+                n_factura_seleccionada = st.selectbox("Seleccione el N° de Factura a pagar:", [""] + lista_n_facturas)
+                
+                if n_factura_seleccionada and n_factura_seleccionada != "":
+                    datos_factura = next(f for f in facturas_pendientes if str(f.get("N FACTURA", "")) == n_factura_seleccionada)
                     
-                    guardar_fila("TESORERIA", valores_teso)
-                    st.success("¡Datos de tesorería guardados encadenadamente de forma exitosa!")
+                    monto_fac_val = float(datos_factura.get("MONTO FACTURA", 0.0) if pd.notnull(datos_factura.get("MONTO FACTURA")) else 0.0)
+                    
+                    # Calculamos si ya tuvo pagos parciales previos
+                    monto_pagado_previo = 0.0
+                    if not df_tesoreria.empty and "N FACTURA" in df_tesoreria.columns and "MONTO PAGO" in df_tesoreria.columns:
+                        pagos_previos = df_tesoreria[df_tesoreria["N FACTURA"].astype(str) == n_factura_seleccionada]
+                        for _, p in pagos_previos.iterrows():
+                            try:
+                                monto_pagado_previo += float(p.get("MONTO PAGO", 0.0))
+                            except:
+                                pass
+                    
+                    monto_restante = monto_fac_val - monto_pagado_previo
+                    
+                    st.info(f"**Proveedor:** {datos_factura.get('PROVEEDOR', '')} | **Monto Total Factura:** ${monto_fac_val:,.2f}")
+                    if monto_pagado_previo > 0:
+                        st.warning(f"⚠️ Esta factura ya tiene pagos parciales registrados por un total de **${monto_pagado_previo:,.2f}**.")
+                    
+                    st.markdown(f"### 💵 El monto a pagar de esta Factura es: **${monto_restante:,.2f}**")
+                    
+                    with st.form("form_tesoreria", clear_on_submit=True):
+                        st.subheader("Completar datos de Pago")
+                        fecha_pago = st.date_input("Fecha de Pago")
+                        n_orden_pago = st.text_input("N° Orden de Pago")
+                        medio_pago = st.selectbox("Medio de Pago", ["Transferencia", "Cheque", "Efectivo"])
+                        fecha_debito_cheque = st.date_input("Fecha Débito / Cheque")
+                        
+                        tipo_pago = st.selectbox("Tipo de Pago", ["Pago Parcial", "Pago Total"])
+                        monto_a_pagar = st.number_input("Monto de este Pago", min_value=0.0, max_value=float(monto_restante), value=float(monto_restante), format="%.2f")
+                        
+                        submit_teso = st.form_submit_button("Guardar Datos de Tesorería")
+                        if submit_submit := submit_teso:
+                            # Estructura para Tesorería (incluyendo el tipo de pago y monto abonado en las columnas adicionales)
+                            valores_teso = [
+                                str(datos_factura.get("NUMERO ORDEN DE COMPRAS", "")),
+                                str(datos_factura.get("FECHA", "")),
+                                str(datos_factura.get("N PROVEEDOR", "")),
+                                str(datos_factura.get("PROVEEDOR", "")),
+                                float(datos_factura.get("MONTO", 0.0) if pd.notnull(datos_factura.get("MONTO")) else 0.0),
+                                str(datos_factura.get("ESTADO", "")),
+                                str(datos_factura.get("N FACTURA", "")),
+                                str(datos_factura.get("FECHA DE COMPROBANTE", "")),
+                                float(monto_fac_val),
+                                str(datos_factura.get("FECHA DE VENCIMIENTO", "")),
+                                str(fecha_pago),         
+                                str(n_orden_pago),       
+                                str(medio_pago),         
+                                str(fecha_debito_cheque),
+                                str(tipo_pago),
+                                float(monto_a_pagar)
+                            ]
+                            
+                            guardar_fila("TESORERIA", valores_teso)
+                            st.success("¡Datos de tesorería guardados encadenadamente de forma exitosa!")
+                            st.rerun()
