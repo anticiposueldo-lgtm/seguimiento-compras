@@ -68,8 +68,21 @@ if menu == "Compras":
     n_orden = st.text_input("NUMERO ORDEN DE COMPRAS", key="input_n_orden")
     
     df_compras_actual = obtener_datos("COMPRAS")
-    orden_existente = None
+    df_facturas_actual = obtener_datos("FACTURAS")
     
+    orden_existente = None
+    estado_desde_facturas = None
+    
+    # Verificamos si la orden ya tiene facturas asociadas y su estado en la columna F
+    if n_orden and not df_facturas_actual.empty:
+        col_oc_fac = df_facturas_actual.columns[0]
+        match_fac = df_facturas_actual[df_facturas_actual[col_oc_facturas].astype(str).str.strip() == str(n_orden).strip()]
+        if not match_fac.empty:
+            # Tomamos el estado de la columna F (índice 5 o nombre ESTADO)
+            col_est_fac = next((c for c in match_fac.columns if "ESTADO" in c.upper()), match_fac.columns[5] if len(match_fac.columns) > 5 else None)
+            if col_est_fac:
+                estado_desde_facturas = str(match_fac.iloc[-1].get(col_est_fac, ""))
+
     if n_orden and not df_compras_actual.empty and "NUMERO ORDEN DE COMPRAS" in df_compras_actual.columns:
         match = df_compras_actual[df_compras_actual["NUMERO ORDEN DE COMPRAS"].astype(str).str.strip() == str(n_orden).strip()]
         if not match.empty:
@@ -79,9 +92,15 @@ if menu == "Compras":
 
     default_n_prov = str(orden_existente.get("N PROVEEDOR", "")) if orden_existente is not None else ""
     default_monto = float(orden_existente.get("MONTO", 0.0)) if orden_existente is not None else 0.0
-    default_estado = str(orden_existente.get("ESTADO", "Pendiente")) if orden_existente is not None else "Pendiente"
     
-    estados_disponibles = ["Pendiente"]
+    # Determinamos el estado: si ya tiene un estado en Facturas, usamos ese; si no, el de Compras
+    default_estado = "Pendiente"
+    if estado_desde_facturas and estado_desde_facturas in ["Parcial", "Cerrada", "Pendiente"]:
+        default_estado = estado_desde_facturas
+    elif orden_existente is not None:
+        default_estado = str(orden_existente.get("ESTADO", "Pendiente"))
+    
+    estados_disponibles = ["Pendiente", "Parcial", "Cerrada", "Aprobado", "Rechazado", "Pagado"]
     idx_estado = estados_disponibles.index(default_estado) if default_estado in estados_disponibles else 0
 
     fecha = st.date_input("FECHA")
@@ -95,10 +114,12 @@ if menu == "Compras":
 
     proveedor = st.text_input("PROVEEDOR", value=nombre_proveedor_auto)
     monto = st.number_input("MONTO", min_value=0.0, format="%.2f", value=default_monto, key="input_monto")
+    
+    # Si viene con estado actualizado desde Facturas, lo mostramos bloqueado o seleccionado
     estado = st.selectbox("ESTADO", estados_disponibles, index=idx_estado)
 
     if orden_existente is not None:
-        st.warning(f"⚠️ La Orden N° **{n_orden}** ya se encuentra registrada en la planilla.")
+        st.warning(f"⚠️ La Orden N° **{n_orden}** ya se encuentra registrada en la planilla. Estado actual: **{default_estado}**")
         if st.button("🗑️ Anular / Limpiar este Registro"):
             res = eliminar_fila("COMPRAS", str(n_orden))
             if res and res.get("status") == "deleted":
@@ -151,7 +172,7 @@ elif menu == "Facturas":
                 monto_factura = st.number_input("Monto Factura", min_value=0.0, format="%.2f")
                 fecha_vencimiento = st.date_input("Fecha de Vencimiento")
                 
-                nuevo_estado_compra = st.selectbox("Actualizar Estado de la Orden de Compra:", ["Parcial", "Cerrada"])
+                nuevo_estado_compra = st.selectbox("Actualizar Estado de la Orden de Compra:", ["Parcial", "Cerrada", "Pendiente"])
                 
                 submit_factura = st.form_submit_button("Guardar Datos de Factura")
                 if submit_factura:
@@ -189,10 +210,8 @@ elif menu == "Tesorería":
             
             facturas_pendientes = []
             for _, fac in facturas_orden.iterrows():
-                # N° de Factura (Columna G / índice 6)
                 n_fac = str(fac.iloc[6]) if len(fac) > 6 else ""
                 
-                # Monto de la Factura (Columna I / índice 8)
                 monto_f_total = 0.0
                 try:
                     monto_f_total = float(fac.iloc[8]) if len(fac) > 8 and pd.notnull(fac.iloc[8]) else 0.0
@@ -245,7 +264,6 @@ elif menu == "Tesorería":
                     if monto_restante < 0:
                         monto_restante = 0.0
                     
-                    # Extracción segura del proveedor por nombre de columna o por posición segura
                     proveedor_nombre = ""
                     for col_key in datos_factura.keys():
                         if "PROVEEDOR" in str(col_key).upper() and "N" not in str(col_key).upper():
@@ -272,7 +290,6 @@ elif menu == "Tesorería":
                         
                         submit_teso = st.form_submit_button("Guardar Datos de Tesorería")
                         if submit_submit := submit_teso:
-                            # Extracción segura de los valores para guardar en Tesorería
                             val_list = list(datos_factura.values())
                             c_orden = str(val_list[0]) if len(val_list) > 0 else ""
                             c_fecha = str(val_list[1]) if len(val_list) > 1 else ""
