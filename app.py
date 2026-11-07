@@ -50,7 +50,7 @@ def eliminar_fila(sheet_name, orden):
         st.error(f"Error al eliminar: {e}")
         return None
 
-menu = st.sidebar.radio("Secciones", ["Compras", "Facturas", "Tesorería"])
+menu = st.sidebar.radio("Secciones", ["Compras", "Facturas", "Tesorería", "Reportes"])
 
 # ==========================================
 # 1. SECCIÓN COMPRAS
@@ -153,7 +153,6 @@ elif menu == "Facturas":
         if n_orden_buscar and n_orden_buscar != "":
             datos_orden = df_validas[df_validas["NUMERO ORDEN DE COMPRAS"].astype(str) == n_orden_buscar].iloc[0]
             
-            # Calculamos el estado actual desde la hoja Facturas si ya tiene registros
             estado_actual_fac = "Pendiente"
             total_facturado_previo = 0.0
             
@@ -161,12 +160,10 @@ elif menu == "Facturas":
                 col_oc_fac = df_facturas.columns[0]
                 match_facs = df_facturas[df_facturas[col_oc_fac].astype(str).str.strip() == str(n_orden_buscar).strip()]
                 if not match_facs.empty:
-                    # Obtenemos el estado de la última factura cargada
                     col_est = next((c for c in match_facs.columns if "ESTADO" in c.upper()), match_facs.columns[5] if len(match_facs.columns) > 5 else None)
                     if col_est:
                         estado_actual_fac = str(match_facs.iloc[-1].get(col_est, "Pendiente"))
                     
-                    # Sumamos los montos de todas las facturas previas para esta orden
                     col_monto_f = next((c for c in match_facs.columns if "MONTO FACTURA" in c.upper() or "MONTO COMP" in c.upper()), match_facs.columns[8] if len(match_facs.columns) > 8 else None)
                     if col_monto_f:
                         for _, f_row in match_facs.iterrows():
@@ -205,7 +202,9 @@ elif menu == "Facturas":
                 
                 submit_factura = st.form_submit_button("Guardar Datos de Factura")
                 if submit_factura:
-                    # Si seleccionan "Cerrada", forzamos a que el disponible sea 0 o validamos
+                    if nuevo_estado_compra == "Cerrada":
+                        monto_disponible = 0.0
+                        
                     valores_fila = [
                         str(datos_orden.get("NUMERO ORDEN DE COMPRAS", "")),
                         str(datos_orden.get("FECHA", "")),
@@ -314,6 +313,7 @@ elif menu == "Tesorería":
                         fecha_pago = st.date_input("Fecha de Pago")
                         n_orden_pago = st.text_input("N° Orden de Pago")
                         medio_pago = st.selectbox("Medio de Pago", ["Transferencia", "Cheque", "Efectivo"])
+                        banco_pago = st.text_input("Banco")
                         fecha_debito_cheque = st.date_input("Fecha Débito / Cheque")
                         
                         tipo_pago = st.selectbox("Tipo de Pago", ["Pago Parcial", "Pago Total"])
@@ -339,12 +339,138 @@ elif menu == "Tesorería":
                             c_m_fac = float(monto_fac_val) 
                             c_f_venc = str(val_list[9]) if len(val_list) > 9 else ""
                             
+                            # Orden exacto para que Banco quede en la columna N y Fecha Débito/Cheque en la columna O
                             valores_teso = [
                                 c_orden, c_fecha, c_n_prov, c_prov, c_monto_oc, c_estado,
                                 c_n_fac, c_f_comp, c_m_fac, c_f_venc,
-                                str(fecha_pago), str(n_orden_pago), str(medio_pago), str(fecha_debito_cheque)
+                                str(fecha_pago), str(n_orden_pago), str(medio_pago), str(banco_pago), str(fecha_debito_cheque)
                             ]
                             
                             guardar_fila("TESORERIA", valores_teso)
                             st.success("¡Datos de tesorería guardados encadenadamente de forma exitosa!")
                             st.rerun()
+
+# ==========================================
+# 4. SECCIÓN REPORTES
+# ==========================================
+elif menu == "Reportes":
+    st.header("📈 Módulo de Reportes Financieros")
+    
+    tipo_reporte = st.selectbox("Seleccione el Reporte a Consultar:", [
+        "Facturas Ordenadas por Proveedor", 
+        "Facturas Ordenadas por Fecha de Vencimiento", 
+        "Pagos con Cheque por Fecha Débito", 
+        "Órdenes de Compra Pendientes de Factura"
+    ])
+    
+    st.markdown("---")
+    st.markdown("### Municipalidad de Sunchales - Seguimiento Financiero")
+    st.markdown(f"#### Reporte: {tipo_reporte}")
+    
+    df_compras = obtener_datos("COMPRAS")
+    df_facturas = obtener_datos("FACTURAS")
+    df_tesoreria = obtener_datos("TESORERIA")
+    
+    if tipo_reporte == "Facturas Ordenadas por Proveedor":
+        if not df_facturas.empty:
+            col_prov = next((c for c in df_facturas.columns if "PROVEEDOR" in c.upper() and "N" not in c.upper()), df_facturas.columns[3] if len(df_facturas.columns) > 3 else None)
+            col_monto = next((c for c in df_facturas.columns if "MONTO FACTURA" in c.upper() or "MONTO COMP" in c.upper()), df_facturas.columns[8] if len(df_facturas.columns) > 8 else None)
+            col_venc = next((c for c in df_facturas.columns if "VENCIMIENTO" in c.upper()), df_facturas.columns[9] if len(df_facturas.columns) > 9 else None)
+            
+            if col_prov and col_monto:
+                df_rep = df_facturas.copy()
+                df_rep[col_monto] = pd.to_numeric(df_rep[col_monto], errors='coerce').fillna(0.0)
+                df_rep = df_rep.sort_values(by=col_prov)
+                
+                st.dataframe(df_rep[[col_prov, 'N FACTURA', col_monto, col_venc]], use_container_width=True)
+                total_monto = df_rep[col_monto].sum()
+                st.markdown(f"### **Total General:** ${total_monto:,.2f}")
+                
+                csv = df_rep.to_csv(index=False).encode('utf-8')
+                st.download_button("📥 Descargar Reporte en Excel (CSV)", csv, "facturas_por_proveedor.csv", "text/csv")
+            else:
+                st.warning("No se encontraron las columnas necesarias en la hoja Facturas.")
+        else:
+            st.info("No hay datos de facturas registrados.")
+            
+    elif tipo_reporte == "Facturas Ordenadas por Fecha de Vencimiento":
+        if not df_facturas.empty:
+            col_prov = next((c for c in df_facturas.columns if "PROVEEDOR" in c.upper() and "N" not in c.upper()), df_facturas.columns[3] if len(df_facturas.columns) > 3 else None)
+            col_monto = next((c for c in df_facturas.columns if "MONTO FACTURA" in c.upper() or "MONTO COMP" in c.upper()), df_facturas.columns[8] if len(df_facturas.columns) > 8 else None)
+            col_venc = next((c for c in df_facturas.columns if "VENCIMIENTO" in c.upper()), df_facturas.columns[9] if len(df_facturas.columns) > 9 else None)
+            
+            if col_venc and col_monto:
+                df_rep = df_facturas.copy()
+                df_rep[col_monto] = pd.to_numeric(df_rep[col_monto], errors='coerce').fillna(0.0)
+                df_rep = df_rep.sort_values(by=col_venc)
+                
+                st.dataframe(df_rep[[col_venc, col_prov, 'N FACTURA', col_monto]], use_container_width=True)
+                total_monto = df_rep[col_monto].sum()
+                st.markdown(f"### **Total General:** ${total_monto:,.2f}")
+                
+                csv = df_rep.to_csv(index=False).encode('utf-8')
+                st.download_button("📥 Descargar Reporte en Excel (CSV)", csv, "facturas_por_vencimiento.csv", "text/csv")
+            else:
+                st.warning("No se encontraron las columnas necesarias en la hoja Facturas.")
+        else:
+            st.info("No hay datos de facturas registrados.")
+            
+    elif tipo_reporte == "Pagos con Cheque por Fecha Débito":
+        if not df_tesoreria.empty:
+            col_medio = next((c for c in df_tesoreria.columns if "MEDIO" in c.upper()), df_tesoreria.columns[12] if len(df_tesoreria.columns) > 12 else None)
+            col_banco = next((c for c in df_tesoreria.columns if "BANCO" in c.upper()), df_tesoreria.columns[13] if len(df_tesoreria.columns) > 13 else None)
+            col_f_deb = next((c for c in df_tesoreria.columns if "DÉBITO" in c.upper() or "DEBITO" in c.upper() or "CHEQUE" in c.upper()), df_tesoreria.columns[14] if len(df_tesoreria.columns) > 14 else None)
+            col_m_pago = next((c for c in df_tesoreria.columns if "PAGO" in c.upper() and c.upper() != "MEDIO DE PAGO"), df_tesoreria.columns[8] if len(df_tesoreria.columns) > 8 else None)
+            col_prov = next((c for c in df_tesoreria.columns if "PROVEEDOR" in c.upper() and "N" not in c.upper()), df_tesoreria.columns[3] if len(df_tesoreria.columns) > 3 else None)
+            
+            if col_medio:
+                df_cheques = df_tesoreria[df_tesoreria[col_medio].astype(str).str.strip().str.lower() == "cheque"].copy()
+                if not df_cheques.empty:
+                    if col_m_pago:
+                        df_cheques[col_m_pago] = pd.to_numeric(df_cheques[col_m_pago], errors='coerce').fillna(0.0)
+                    if col_f_deb:
+                        df_cheques = df_cheques.sort_values(by=col_f_deb)
+                    
+                    columnas_mostrar = [c for c in [col_f_deb, col_prov, col_m_pago, col_banco, 'N FACTURA'] if c in df_cheques.columns]
+                    st.dataframe(df_cheques[columnas_mostrar], use_container_width=True)
+                    
+                    total_cheques = df_cheques[col_m_pago].sum() if col_m_pago else 0.0
+                    st.markdown(f"### **Total General en Cheques:** ${total_cheques:,.2f}")
+                    
+                    csv = df_cheques.to_csv(index=False).encode('utf-8')
+                    st.download_button("📥 Descargar Reporte en Excel (CSV)", csv, "pagos_con_cheque.csv", "text/csv")
+                else:
+                    st.info("No hay registros de pagos realizados con Cheque.")
+            else:
+                st.warning("No se encontró la columna de Medio de Pago en Tesorería.")
+        else:
+            st.info("No hay datos en Tesorería.")
+            
+    elif tipo_reporte == "Órdenes de Compra Pendientes de Factura":
+        if not df_compras.empty:
+            col_oc_compra = next((c for c in df_compras.columns if "ORDEN" in c.upper()), df_compras.columns[0])
+            col_monto_oc = next((c for c in df_compras.columns if c.upper() == "MONTO"), df_compras.columns[4] if len(df_compras.columns) > 4 else None)
+            
+            facturadas = set()
+            if not df_facturas.empty:
+                col_oc_fac = next((c for c in df_facturas.columns if "ORDEN" in c.upper()), df_facturas.columns[0])
+                facturadas = set(df_facturas[col_oc_fac].astype(str).str.strip())
+            
+            df_validas = df_compras[df_compras["PROVEEDOR"].astype(str) != "ANULADO"].copy()
+            df_pendientes = df_validas[~df_validas[col_oc_compra].astype(str).str.strip().isin(facturadas)]
+            
+            if not df_pendientes.empty:
+                if col_monto_oc:
+                    df_pendientes[col_monto_oc] = pd.to_numeric(df_pendientes[col_monto_oc], errors='coerce').fillna(0.0)
+                
+                st.dataframe(df_pendientes, use_container_width=True)
+                total_pendientes = df_pendientes[col_monto_oc].sum() if col_monto_oc else 0.0
+                st.markdown(f"### **Total General Pendiente:** ${total_pendientes:,.2f}")
+                
+                csv = df_pendientes.to_csv(index=False).encode('utf-8')
+                st.download_button("📥 Descargar Reporte en Excel (CSV)", csv, "ordenes_pendientes_factura.csv", "text/csv")
+            else:
+                st.success("✅ ¡Todas las órdenes de compra ya tienen facturas asociadas!")
+        else:
+            st.info("No hay datos de compras registrados.")
+            
