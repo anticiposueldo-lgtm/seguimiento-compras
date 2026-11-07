@@ -81,7 +81,7 @@ if menu == "Compras":
     default_monto = float(orden_existente.get("MONTO", 0.0)) if orden_existente is not None else 0.0
     default_estado = str(orden_existente.get("ESTADO", "Pendiente")) if orden_existente is not None else "Pendiente"
     
-    estados_disponibles = ["Pendiente", "Parcial", "Cerrada", "Aprobado", "Rechazado", "Pagado"]
+    estados_disponibles = ["Pendiente"]
     idx_estado = estados_disponibles.index(default_estado) if default_estado in estados_disponibles else 0
 
     fecha = st.date_input("FECHA")
@@ -151,7 +151,7 @@ elif menu == "Facturas":
                 monto_factura = st.number_input("Monto Factura", min_value=0.0, format="%.2f")
                 fecha_vencimiento = st.date_input("Fecha de Vencimiento")
                 
-                nuevo_estado_compra = st.selectbox("Actualizar Estado de la Orden de Compra:", ["Parcial", "Cerrada", "Pendiente"])
+                nuevo_estado_compra = st.selectbox("Actualizar Estado de la Orden de Compra:", ["Parcial", "Cerrada"])
                 
                 submit_factura = st.form_submit_button("Guardar Datos de Factura")
                 if submit_factura:
