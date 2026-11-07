@@ -73,7 +73,6 @@ if menu == "Compras":
     orden_existente = None
     estado_desde_facturas = None
     
-    # Verificamos si la orden ya tiene facturas asociadas y su estado en la columna F
     if n_orden and not df_facturas_actual.empty:
         col_oc_fac = next((c for c in df_facturas_actual.columns if "ORDEN" in c.upper()), df_facturas_actual.columns[0])
         match_fac = df_facturas_actual[df_facturas_actual[col_oc_fac].astype(str).str.strip() == str(n_orden).strip()]
@@ -144,6 +143,8 @@ if menu == "Compras":
 elif menu == "Facturas":
     st.header("📄 Gestión de Facturas")
     df_compras = obtener_datos("COMPRAS")
+    df_facturas = obtener_datos("FACTURAS")
+    
     if not df_compras.empty and "NUMERO ORDEN DE COMPRAS" in df_compras.columns:
         df_validas = df_compras[df_compras["PROVEEDOR"].astype(str) != "ANULADO"]
         lista_ordenes = df_validas["NUMERO ORDEN DE COMPRAS"].astype(str).tolist()
@@ -151,33 +152,66 @@ elif menu == "Facturas":
         
         if n_orden_buscar and n_orden_buscar != "":
             datos_orden = df_validas[df_validas["NUMERO ORDEN DE COMPRAS"].astype(str) == n_orden_buscar].iloc[0]
+            
+            # Calculamos el estado actual desde la hoja Facturas si ya tiene registros
+            estado_actual_fac = "Pendiente"
+            total_facturado_previo = 0.0
+            
+            if not df_facturas.empty:
+                col_oc_fac = df_facturas.columns[0]
+                match_facs = df_facturas[df_facturas[col_oc_fac].astype(str).str.strip() == str(n_orden_buscar).strip()]
+                if not match_facs.empty:
+                    # Obtenemos el estado de la última factura cargada
+                    col_est = next((c for c in match_facs.columns if "ESTADO" in c.upper()), match_facs.columns[5] if len(match_facs.columns) > 5 else None)
+                    if col_est:
+                        estado_actual_fac = str(match_facs.iloc[-1].get(col_est, "Pendiente"))
+                    
+                    # Sumamos los montos de todas las facturas previas para esta orden
+                    col_monto_f = next((c for c in match_facs.columns if "MONTO FACTURA" in c.upper() or "MONTO COMP" in c.upper()), match_facs.columns[8] if len(match_facs.columns) > 8 else None)
+                    if col_monto_f:
+                        for _, f_row in match_facs.iterrows():
+                            try:
+                                total_facturado_previo += float(f_row.get(col_monto_f, 0.0))
+                            except:
+                                pass
+            
+            monto_compra_total = float(datos_orden.get('MONTO', 0.0) if pd.notnull(datos_orden.get('MONTO')) else 0.0)
+            monto_disponible = monto_compra_total - total_facturado_previo
+            if monto_disponible < 0:
+                monto_disponible = 0.0
+            
             st.info("Datos recuperados de la Orden de Compra:")
             col1, col2, col3 = st.columns(3)
             col1.write(f"**Proveedor:** {datos_orden.get('PROVEEDOR', '')}")
             
-            monto_compra_raw = datos_orden.get('MONTO', 0)
-            monto_compra_fmt = f"${float(monto_compra_raw):,.2f}" if pd.notnull(monto_compra_raw) and str(monto_compra_raw) != "" else "$0.00"
+            monto_compra_fmt = f"${monto_compra_total:,.2f}"
             col2.write(f"**Monto Compra:** {monto_compra_fmt}")
             
-            col3.write(f"**Estado Actual:** {datos_orden.get('ESTADO', '')}")
+            col3.write(f"**Estado Actual:** {estado_actual_fac}")
+            
+            if total_facturado_previo > 0:
+                st.warning(f"⚠️ Ya se facturó un total de **${total_facturado_previo:,.2f}** para esta orden.")
+            
+            st.markdown(f"### 💵 Monto disponible para facturar: **${monto_disponible:,.2f}**")
             
             with st.form("form_facturas", clear_on_submit=True):
-                st.subheader("Completar datos de Facturación (Columnas G a J) y Estado")
+                st.subheader("Completar datos de Facturación y Estado")
                 n_factura = st.text_input("N° de Factura")
                 fecha_comprobante = st.date_input("Fecha de Comprobante")
-                monto_factura = st.number_input("Monto Factura", min_value=0.0, format="%.2f")
+                monto_factura = st.number_input("Monto Factura", min_value=0.0, max_value=float(monto_disponible) if monto_disponible > 0 else 0.0, value=min(100.0, monto_disponible) if monto_disponible > 0 else 0.0, format="%.2f")
                 fecha_vencimiento = st.date_input("Fecha de Vencimiento")
                 
                 nuevo_estado_compra = st.selectbox("Actualizar Estado de la Orden de Compra:", ["Parcial", "Cerrada", "Pendiente"])
                 
                 submit_factura = st.form_submit_button("Guardar Datos de Factura")
                 if submit_factura:
+                    # Si seleccionan "Cerrada", forzamos a que el disponible sea 0 o validamos
                     valores_fila = [
                         str(datos_orden.get("NUMERO ORDEN DE COMPRAS", "")),
                         str(datos_orden.get("FECHA", "")),
                         str(datos_orden.get("N PROVEEDOR", "")),
                         str(datos_orden.get("PROVEEDOR", "")),
-                        float(datos_orden.get("MONTO", 0.0)),
+                        float(monto_compra_total),
                         str(nuevo_estado_compra), 
                         str(n_factura),           
                         str(fecha_comprobante),   
@@ -187,6 +221,7 @@ elif menu == "Facturas":
                     
                     guardar_fila("FACTURAS", valores_fila, n_orden=n_orden_buscar, nuevo_estado=nuevo_estado_compra)
                     st.success("¡Datos de factura guardados y estado de compra actualizado correctamente!")
+                    st.rerun()
 
 # ==========================================
 # 3. SECCIÓN TESORERÍA
@@ -313,4 +348,3 @@ elif menu == "Tesorería":
                             guardar_fila("TESORERIA", valores_teso)
                             st.success("¡Datos de tesorería guardados encadenadamente de forma exitosa!")
                             st.rerun()
-                            
