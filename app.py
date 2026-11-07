@@ -189,10 +189,13 @@ elif menu == "Tesorería":
             
             facturas_pendientes = []
             for _, fac in facturas_orden.iterrows():
-                # Buscamos el N° de Factura (columna que contenga FACTURA pero no MONTO FACTURA)
-                col_n_fac = next((c for c in fac.index if "FACTURA" in c.upper() and c.upper() != "MONTO FACTURA"), None)
-                # Buscamos el Monto Total de la Factura de forma exacta (Columna I)
-                col_monto_fac = next((c for c in fac.index if "MONTO FACTURA" in c.upper() or "MONTO" in c.upper()), fac.index[8] if len(fac.index) > 8 else None)
+                # Buscamos exactamente la columna N FACTURA (Columna G)
+                col_n_fac = next((c for c in fac.index if "N FACTURA" in c.upper() or c.upper() == "N° FACTURA" or c.upper() == "N FACTURA"), None)
+                if not col_n_fac:
+                    col_n_fac = next((c for c in fac.index if "FACTURA" in c.upper() and c.upper() != "MONTO COMP" and c.upper() != "MONTO FACTURA"), None)
+                
+                # Buscamos exactamente la columna de Monto en Facturas (MONTO COMP o MONTO FACTURA - Columna I)
+                col_monto_fac = next((c for c in fac.index if "MONTO COMP" in c.upper() or "MONTO FACTURA" in c.upper()), None)
                 
                 n_fac = str(fac.get(col_n_fac, "")) if col_n_fac else ""
                 
@@ -284,7 +287,7 @@ elif menu == "Tesorería":
                             c_estado = str(datos_factura.get("ESTADO", ""))
                             c_n_fac = str(n_factura_seleccionada)
                             c_f_comp = str(datos_factura.get("FECHA DE COMPROBANTE", ""))
-                            c_m_fac = float(monto_fac_val) # Columna E (Monto de la Factura)
+                            c_m_fac = float(monto_fac_val) # Monto Factura (Columna E de Tesorería)
                             c_f_venc = str(datos_factura.get("FECHA DE VENCIMIENTO", ""))
                             
                             valores_teso = [
