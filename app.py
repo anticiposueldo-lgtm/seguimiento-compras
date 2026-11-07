@@ -75,10 +75,9 @@ if menu == "Compras":
     
     # Verificamos si la orden ya tiene facturas asociadas y su estado en la columna F
     if n_orden and not df_facturas_actual.empty:
-        col_oc_fac = df_facturas_actual.columns[0]
-        match_fac = df_facturas_actual[df_facturas_actual[col_oc_facturas].astype(str).str.strip() == str(n_orden).strip()]
+        col_oc_fac = next((c for c in df_facturas_actual.columns if "ORDEN" in c.upper()), df_facturas_actual.columns[0])
+        match_fac = df_facturas_actual[df_facturas_actual[col_oc_fac].astype(str).str.strip() == str(n_orden).strip()]
         if not match_fac.empty:
-            # Tomamos el estado de la columna F (índice 5 o nombre ESTADO)
             col_est_fac = next((c for c in match_fac.columns if "ESTADO" in c.upper()), match_fac.columns[5] if len(match_fac.columns) > 5 else None)
             if col_est_fac:
                 estado_desde_facturas = str(match_fac.iloc[-1].get(col_est_fac, ""))
@@ -93,7 +92,6 @@ if menu == "Compras":
     default_n_prov = str(orden_existente.get("N PROVEEDOR", "")) if orden_existente is not None else ""
     default_monto = float(orden_existente.get("MONTO", 0.0)) if orden_existente is not None else 0.0
     
-    # Determinamos el estado: si ya tiene un estado en Facturas, usamos ese; si no, el de Compras
     default_estado = "Pendiente"
     if estado_desde_facturas and estado_desde_facturas in ["Parcial", "Cerrada", "Pendiente"]:
         default_estado = estado_desde_facturas
@@ -114,8 +112,6 @@ if menu == "Compras":
 
     proveedor = st.text_input("PROVEEDOR", value=nombre_proveedor_auto)
     monto = st.number_input("MONTO", min_value=0.0, format="%.2f", value=default_monto, key="input_monto")
-    
-    # Si viene con estado actualizado desde Facturas, lo mostramos bloqueado o seleccionado
     estado = st.selectbox("ESTADO", estados_disponibles, index=idx_estado)
 
     if orden_existente is not None:
