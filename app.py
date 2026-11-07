@@ -180,7 +180,7 @@ elif menu == "Tesorería":
     df_tesoreria = obtener_datos("TESORERIA")
     
     if not df_facturas.empty:
-        col_oc_facturas = df_facturas.columns[0] # Columna A (N° Orden de Compras)
+        col_oc_facturas = df_facturas.columns[0]
         lista_ordenes = df_facturas[col_oc_facturas].astype(str).unique().tolist()
         n_orden_teso = st.selectbox("Seleccione el N° de Orden de Compra para Tesorería:", [""] + lista_ordenes)
         
@@ -189,10 +189,10 @@ elif menu == "Tesorería":
             
             facturas_pendientes = []
             for _, fac in facturas_orden.iterrows():
-                # Columna G (índice 6) es N° de Factura
+                # N° de Factura (Columna G / índice 6)
                 n_fac = str(fac.iloc[6]) if len(fac) > 6 else ""
                 
-                # Columna I (índice 8) es el Monto Total de la Factura
+                # Monto de la Factura (Columna I / índice 8)
                 monto_f_total = 0.0
                 try:
                     monto_f_total = float(fac.iloc[8]) if len(fac) > 8 and pd.notnull(fac.iloc[8]) else 0.0
@@ -205,7 +205,6 @@ elif menu == "Tesorería":
                 if not df_tesoreria.empty and n_fac:
                     for _, p in df_tesoreria.iterrows():
                         try:
-                            # En tesorería: Columna G (índice 6) es N° Factura y Columna I (índice 8) es el Monto Pagado
                             p_n_fac = str(p.iloc[6]).strip() if len(p) > 6 else ""
                             if p_n_fac == str(n_fac).strip():
                                 total_pagado_acumulado += float(p.iloc[8]) if len(p) > 8 and pd.notnull(p.iloc[8]) else 0.0
@@ -222,7 +221,7 @@ elif menu == "Tesorería":
                     facturas_pendientes.append(fac_dict)
             
             if not facturas_pendientes:
-                st.success("✅ ¡Todas las facturas asociadasadhesive a esta Orden de Compra ya han sido pagadas en su totalidad!")
+                st.success("✅ ¡Todas las facturas asociadas a esta Orden de Compra ya han sido pagadas en su totalidad!")
             else:
                 lista_n_facturas = [str(f.get("_N_FAC_REAL", "")) for f in facturas_pendientes]
                 n_factura_seleccionada = st.selectbox("Seleccione el N° de Factura a pagar:", [""] + lista_n_facturas)
@@ -232,7 +231,6 @@ elif menu == "Tesorería":
                     
                     monto_fac_val = datos_factura.get("_MONTO_REAL", 0.0)
                     
-                    # Sumamos los pagos previos buscando estrictamente en la Columna G de Tesorería y sumando la Columna I
                     monto_pagado_previo = 0.0
                     if not df_tesoreria.empty:
                         for _, p in df_tesoreria.iterrows():
@@ -247,7 +245,14 @@ elif menu == "Tesorería":
                     if monto_restante < 0:
                         monto_restante = 0.0
                     
-                    proveedor_nombre = str(datos_factura.iloc[3]) if len(datos_factura) > 3 else ""
+                    # Extracción segura del proveedor por nombre de columna o por posición segura
+                    proveedor_nombre = ""
+                    for col_key in datos_factura.keys():
+                        if "PROVEEDOR" in str(col_key).upper() and "N" not in str(col_key).upper():
+                            proveedor_nombre = str(datos_factura.get(col_key, ""))
+                            break
+                    if not proveedor_nombre and len(datos_factura) > 3:
+                        proveedor_nombre = str(list(datos_factura.values())[3])
                     
                     st.info(f"**Proveedor:** {proveedor_nombre} | **Monto Total Factura:** ${monto_fac_val:,.2f}")
                     if monto_pagado_previo > 0:
@@ -267,21 +272,29 @@ elif menu == "Tesorería":
                         
                         submit_teso = st.form_submit_button("Guardar Datos de Tesorería")
                         if submit_submit := submit_teso:
+                            # Extracción segura de los valores para guardar en Tesorería
+                            val_list = list(datos_factura.values())
+                            c_orden = str(val_list[0]) if len(val_list) > 0 else ""
+                            c_fecha = str(val_list[1]) if len(val_list) > 1 else ""
+                            c_n_prov = str(val_list[2]) if len(val_list) > 2 else ""
+                            c_prov = str(proveedor_nombre)
+                            
+                            c_monto_oc = 0.0
+                            try:
+                                c_monto_oc = float(val_list[4]) if len(val_list) > 4 and pd.notnull(val_list[4]) else 0.0
+                            except:
+                                pass
+                                
+                            c_estado = str(val_list[5]) if len(val_list) > 5 else ""
+                            c_n_fac = str(n_factura_seleccionada)
+                            c_f_comp = str(val_list[7]) if len(val_list) > 7 else ""
+                            c_m_fac = float(monto_fac_val) 
+                            c_f_venc = str(val_list[9]) if len(val_list) > 9 else ""
+                            
                             valores_teso = [
-                                str(datos_factura.iloc[0] if len(datos_factura) > 0 else ""),
-                                str(datos_factura.iloc[1] if len(datos_factura) > 1 else ""),
-                                str(datos_factura.iloc[2] if len(datos_factura) > 2 else ""),
-                                str(proveedor_nombre),
-                                float(monto_fac_val),    # Columna E (Monto de la Factura)
-                                str(datos_factura.iloc[5] if len(datos_factura) > 5 else ""),
-                                str(n_factura_seleccionada), # Columna G (N° Factura)
-                                str(datos_factura.iloc[7] if len(datos_factura) > 7 else ""),
-                                float(monto_a_pagar),    # Columna I (Monto Pagado en esta operación)
-                                str(datos_factura.iloc[9] if len(datos_factura) > 9 else ""),
-                                str(fecha_pago),         
-                                str(n_orden_pago),       
-                                str(medio_pago),         
-                                str(fecha_debito_cheque) 
+                                c_orden, c_fecha, c_n_prov, c_prov, c_monto_oc, c_estado,
+                                c_n_fac, c_f_comp, c_m_fac, c_f_venc,
+                                str(fecha_pago), str(n_orden_pago), str(medio_pago), str(fecha_debito_cheque)
                             ]
                             
                             guardar_fila("TESORERIA", valores_teso)
