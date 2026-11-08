@@ -5,7 +5,7 @@ from datetime import datetime
 
 st.set_page_config(page_title="Seguimiento Cierre Anual", layout="wide")
 
-# Estilo CSS para forzar la alineación a la derecha en las columnas numéricas y monetarias de Streamlit
+# Estilo CSS para forzar alineación a la derecha en columnas numéricas y monetarias
 st.markdown("""
     <style>
     div[data-testid="stDataFrame"] td, div[data-testid="stDataFrame"] th {
@@ -478,7 +478,7 @@ elif menu == "Reportes":
         total_general = formatear_moneda(total_general_num)
 
         st.markdown("---")
-        st.markdown("### 📅 Filtrar Síntesis Financiera por Mes y Año")
+        st.markdown("### 📅 Filtrar Síntesis Financiera por Mes y Año (Acumulada)")
         col_anio, col_mes = st.columns(2)
         
         anos_disponibles = [2025, 2026, 2027, 2028]
@@ -491,8 +491,15 @@ elif menu == "Reportes":
         mes_nombre_sel = col_mes.selectbox("Seleccione el Mes:", list(meses_dict.keys()))
         mes_num_sel = meses_dict[mes_nombre_sel]
         
+        # Fecha límite acumulada: último día del mes y año seleccionado
+        if mes_num_sel == 12:
+            fecha_limite = datetime(anio_sel + 1, 1, 1)
+        else:
+            fecha_limite = datetime(anio_sel, mes_num_sel + 1, 1)
+
         hoy = datetime.now()
         
+        # 1. Órdenes de compra sin factura ACUMULADAS hasta el mes seleccionado
         monto_comp_pend_mes = 0.0
         if not df_compras.empty:
             col_oc_c = df_compras.columns[0]
@@ -502,16 +509,18 @@ elif menu == "Reportes":
             df_cp = df_compras[(df_compras["PROVEEDOR"].astype(str) != "ANULADO") & (~df_compras[col_oc_c].astype(str).str.strip().isin(facturadas_set))].copy()
             if not df_cp.empty and col_f_c:
                 df_cp["_dt"] = pd.to_datetime(df_cp[col_f_c], errors='coerce')
-                df_cp_mes = df_cp[(df_cp["_dt"].dt.year == anio_sel) & (df_cp["_dt"].dt.month == mes_num_sel)]
-                monto_comp_pend_mes = pd.to_numeric(df_cp_mes[col_m_c], errors='coerce').fillna(0.0).sum()
+                # ACUMULADO: Fecha menor o igual al último día del mes seleccionado
+                df_cp_acum = df_cp[df_cp["_dt"] < fecha_limite]
+                monto_comp_pend_mes = pd.to_numeric(df_cp_acum[col_m_c], errors='coerce').fillna(0.0).sum()
 
+        # 2. Saldo de órdenes parciales ACUMULADAS hasta el mes seleccionado
         saldo_op_mes = 0.0
         if not df_compras.empty and not df_facturas.empty:
             for _, c_row in df_compras.iterrows():
                 if str(c_row.get("PROVEEDOR")) == "ANULADO":
                     continue
                 f_oc = pd.to_datetime(c_row.iloc[1], errors='coerce')
-                if pd.notnull(f_oc) and f_oc.year == anio_sel and f_oc.month == mes_num_sel:
+                if pd.notnull(f_oc) and f_oc < fecha_limite:
                     n_oc = str(c_row.iloc[0]).strip()
                     m_oc = float(c_row.iloc[4] or 0.0)
                     facs_match = df_facturas[df_facturas.iloc[:, 0].astype(str).str.strip() == n_oc]
@@ -520,6 +529,7 @@ elif menu == "Reportes":
                     if t_fac > 0 and s_pend > 0:
                         saldo_op_mes += s_pend
 
+        # 3 y 4. Facturas no pagadas (Vencidas y A Vencer) ACUMULADAS hasta el mes seleccionado
         facturas_vencidas_monto = 0.0
         facturas_a_vencer_monto = 0.0
         if not df_facturas.empty:
@@ -530,9 +540,9 @@ elif menu == "Reportes":
             
             if not df_f_np.empty and col_venc and col_m_fac:
                 df_f_np["_dt_venc"] = pd.to_datetime(df_f_np[col_venc], errors='coerce')
-                df_f_mes = df_f_np[(df_f_np["_dt_venc"].dt.year == anio_sel) & (df_f_np["_dt_venc"].dt.month == mes_num_sel)]
+                df_f_acum = df_f_np[df_f_np["_dt_venc"] < fecha_limite]
                 
-                for _, frow in df_f_mes.iterrows():
+                for _, frow in df_f_acum.iterrows():
                     monto_f = float(frow[col_m_fac] or 0.0)
                     dt_v = frow["_dt_venc"]
                     if pd.notnull(dt_v):
@@ -541,11 +551,12 @@ elif menu == "Reportes":
                         else:
                             facturas_a_vencer_monto += monto_f
 
+        # 5. Saldo parcial de facturas con pago parcial ACUMULADO
         parciales_pend_mes = 0.0
         if not df_facturas.empty:
             for _, f_row in df_facturas.iterrows():
                 dt_v = pd.to_datetime(f_row.iloc[9], errors='coerce') if len(f_row) > 9 else None
-                if pd.notnull(dt_v) and dt_v.year == anio_sel and dt_v.month == mes_num_sel:
+                if pd.notnull(dt_v) and dt_v < fecha_limite:
                     n_f = str(f_row.iloc[6]).strip()
                     m_f = float(f_row.iloc[8] or 0.0)
                     t_pag = 0.0
@@ -556,11 +567,11 @@ elif menu == "Reportes":
                         parciales_pend_mes += (m_f - t_pag)
 
         sintesis_mes_data = [
-            {"Concepto Financiero Mensual": "Monto de Órdenes de Compra Sin Factura", "Importe": formatear_moneda(monto_comp_pend_mes)},
-            {"Concepto Financiero Mensual": "Saldo de Órdenes de Compra Parciales", "Importe": formatear_moneda(saldo_op_mes)},
-            {"Concepto Financiero Mensual": "Facturas No Pagadas Vencidas", "Importe": formatear_moneda(facturas_vencidas_monto)},
-            {"Concepto Financiero Mensual": "Facturas No Pagadas a Vencer", "Importe": formatear_moneda(facturas_a_vencer_monto)},
-            {"Concepto Financiero Mensual": "Saldo Pendiente de Facturas con Pago Parcial", "Importe": formatear_moneda(parciales_pend_mes)}
+            {"Concepto Financiero Mensual Acumulado": "Monto de Órdenes de Compra Sin Factura", "Importe": formatear_moneda(monto_comp_pend_mes)},
+            {"Concepto Financiero Mensual Acumulado": "Saldo de Órdenes de Compra Parciales", "Importe": formatear_moneda(saldo_op_mes)},
+            {"Concepto Financiero Mensual Acumulado": "Facturas No Pagadas Vencidas", "Importe": formatear_moneda(facturas_vencidas_monto)},
+            {"Concepto Financiero Mensual Acumulado": "Facturas No Pagadas a Vencer", "Importe": formatear_moneda(facturas_a_vencer_monto)},
+            {"Concepto Financiero Mensual Acumulado": "Saldo Pendiente de Facturas con Pago Parcial", "Importe": formatear_moneda(parciales_pend_mes)}
         ]
         df_rep_mensual = pd.DataFrame(sintesis_mes_data)
         total_mes_num = monto_comp_pend_mes + saldo_op_mes + facturas_vencidas_monto + facturas_a_vencer_monto + parciales_pend_mes
@@ -822,7 +833,7 @@ elif menu == "Reportes":
         st.download_button("📥 Descargar Síntesis Anual en Excel (CSV)", csv_anual, "sintesis_anual.csv", "text/csv")
         
         st.markdown("---")
-        st.markdown(f"### 📅 Desglose Mensual: {mes_nombre_sel} {anio_sel}")
+        st.markdown(f"### 📅 Desglose Mensual Acumulado: {mes_nombre_sel} {anio_sel}")
         if not df_rep_mensual.empty:
             st.dataframe(df_rep_mensual, use_container_width=True)
             st.markdown(f"### **Total General del Mes:** {formatear_moneda(total_mes_num)}")
@@ -854,7 +865,7 @@ elif menu == "Reportes":
             {df_rep.to_html(index=False, classes='table')}
             <div class="total">Total General Anual: {total_general}</div>
 
-            <h4>Desglose Mensual: {mes_nombre_sel} {anio_sel}</h4>
+            <h4>Desglose Mensual Acumulado: {mes_nombre_sel} {anio_sel}</h4>
             {df_rep_mensual.to_html(index=False, classes='table') if not df_rep_mensual.empty else "<p>Sin datos</p>"}
             <div class="total">Total General del Mes: {formatear_moneda(total_mes_num)}</div>
             
