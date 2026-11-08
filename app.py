@@ -38,7 +38,6 @@ def obtener_datos(sheet_name):
         response = requests.get(url)
         data = response.json()
         df = pd.DataFrame(data)
-        # Limpiar espacios en los nombres de las columnas para evitar errores por nombres mal escritos
         if not df.empty:
             df.columns = [str(c).strip().upper() for c in df.columns]
         return df
@@ -454,6 +453,7 @@ elif menu == "Reportes":
         except:
             return False, None
 
+    # Función robusta con protección estricta contra valores nulos o vacíos
     def cumple_criterio_fecha(val_fecha):
         if "1." in sub_menu_sintesis:
             return True
@@ -674,7 +674,8 @@ elif menu == "Reportes":
             if col_prov and col_monto:
                 df_temp = df_facturas.copy()
                 if col_venc and "1." not in sub_menu_sintesis:
-                    df_temp = df_temp[df_temp[col_venc].apply(cumple_criterio_fecha)]
+                    # Protección explícita en el filtro apply de Pandas para evitar que filas con nulos rompan la app
+                    df_temp = df_temp[df_temp[col_venc].apply(lambda x: cumple_criterio_fecha(x))]
                 
                 df_temp[col_monto] = pd.to_numeric(df_temp[col_monto], errors='coerce').fillna(0.0)
                 df_rep = df_temp.sort_values(by=col_prov)
@@ -697,7 +698,7 @@ elif menu == "Reportes":
             if col_venc and col_monto:
                 df_temp = df_facturas.copy()
                 if "1." not in sub_menu_sintesis:
-                    df_temp = df_temp[df_temp[col_venc].apply(cumple_criterio_fecha)]
+                    df_temp = df_temp[df_temp[col_venc].apply(lambda x: cumple_criterio_fecha(x))]
                 
                 df_temp[col_monto] = pd.to_numeric(df_temp[col_monto], errors='coerce').fillna(0.0)
                 df_temp_fecha = pd.to_datetime(df_temp[col_venc], errors='coerce')
@@ -724,7 +725,7 @@ elif menu == "Reportes":
                 df_cheques = df_tesoreria[df_tesoreria[col_medio].astype(str).str.strip().str.lower() == "cheque"].copy()
                 if not df_cheques.empty and col_f_deb:
                     if "1." not in sub_menu_sintesis:
-                        df_cheques = df_cheques[df_cheques[col_f_deb].apply(cumple_criterio_fecha)]
+                        df_cheques = df_cheques[df_cheques[col_f_deb].apply(lambda x: cumple_criterio_fecha(x))]
                     
                     df_cheques[col_m_pago] = pd.to_numeric(df_cheques[col_m_pago], errors='coerce').fillna(0.0)
                     df_temp_fdeb = pd.to_datetime(df_cheques[col_f_deb], errors='coerce')
@@ -756,7 +757,7 @@ elif menu == "Reportes":
             
             if not df_pendientes.empty and col_fecha_c:
                 if "1." not in sub_menu_sintesis:
-                    df_pendientes = df_pendientes[df_pendientes[col_fecha_c].apply(cumple_criterio_fecha)]
+                    df_pendientes = df_pendientes[df_pendientes[col_fecha_c].apply(lambda x: cumple_criterio_fecha(x))]
                 
                 df_pendientes[col_monto_oc] = pd.to_numeric(df_pendientes[col_monto_oc], errors='coerce').fillna(0.0)
                 df_pendientes[col_fecha_c] = pd.to_datetime(df_pendientes[col_fecha_c], errors='coerce').dt.strftime('%d/%m/%Y').fillna(df_pendientes[col_fecha_c])
@@ -780,7 +781,7 @@ elif menu == "Reportes":
             
             if not df_pendientes.empty and col_fecha and col_monto_oc:
                 if "1." not in sub_menu_sintesis:
-                    df_pendientes = df_pendientes[df_pendientes[col_fecha].apply(cumple_criterio_fecha)]
+                    df_pendientes = df_pendientes[df_pendientes[col_fecha].apply(lambda x: cumple_criterio_fecha(x))]
                 
                 df_pendientes[col_monto_oc] = pd.to_numeric(df_pendientes[col_monto_oc], errors='coerce').fillna(0.0)
                 df_pendientes["MES"] = pd.to_datetime(df_pendientes[col_fecha], errors='coerce').dt.to_period('M').astype(str)
@@ -849,7 +850,7 @@ elif menu == "Reportes":
             df_temp = df_facturas[~df_facturas[col_n_fac_f].astype(str).str.strip().isin(facturas_pagadas)].copy()
             if not df_temp.empty and col_venc:
                 if "1." not in sub_menu_sintesis:
-                    df_temp = df_temp[df_temp[col_venc].apply(cumple_criterio_fecha)]
+                    df_temp = df_temp[df_temp[col_venc].apply(lambda x: cumple_criterio_fecha(x))]
                 
                 df_temp[col_m_fac] = pd.to_numeric(df_temp[col_m_fac], errors='coerce').fillna(0.0)
                 df_temp[col_venc] = pd.to_datetime(df_temp[col_venc], errors='coerce').dt.strftime('%d/%m/%Y').fillna(df_temp[col_venc])
@@ -867,7 +868,7 @@ elif menu == "Reportes":
                 df_cheques = df_tesoreria[df_tesoreria[col_medio].astype(str).str.strip().str.lower() == "cheque"].copy()
                 if not df_cheques.empty:
                     if "1." not in sub_menu_sintesis:
-                        df_cheques = df_cheques[df_cheques[col_f_deb].apply(cumple_criterio_fecha)]
+                        df_cheques = df_cheques[df_cheques[col_f_deb].apply(lambda x: cumple_criterio_fecha(x))]
                     
                     df_cheques[col_monto_pago] = pd.to_numeric(df_cheques[col_monto_pago], errors='coerce').fillna(0.0)
                     df_temp_fdeb = pd.to_datetime(df_cheques[col_f_deb], errors='coerce')
