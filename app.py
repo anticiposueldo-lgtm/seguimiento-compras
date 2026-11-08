@@ -372,7 +372,8 @@ elif menu == "Reportes":
             cols_deseadas = []
             for c in df_raw.columns:
                 c_up = str(c).upper()
-                if any(x in c_up for x in ["PROVEEDOR", "MEDIO", "BANCO", "DÉBITO", "DEBITO", "CHEQUE", "PAGO", "FACTURA", "ORDEN"]):
+                # Incluimos explícitamente "PAGADO", "MONTO" y las demás columnas clave
+                if any(x in c_up for x in ["PROVEEDOR", "PAGADO", "MONTO", "MEDIO", "BANCO", "DÉBITO", "DEBITO", "CHEQUE", "FACTURA", "ORDEN"]):
                     cols_deseadas.append(c)
             df_rep = df_raw[cols_deseadas].copy() if cols_deseadas else df_raw.copy()
         else:
