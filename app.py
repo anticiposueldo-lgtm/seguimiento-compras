@@ -382,14 +382,11 @@ elif menu == "Reportes":
     elif tipo_reporte == "TESORERÍA - Pagos Ordenados y Acumulados por Mes de Débito":
         df_raw = obtener_datos("TESORERIA")
         if not df_raw.empty:
-            # Buscamos las columnas clave de monto pagado y fecha débito
             col_monto = next((c for c in df_raw.columns if any(k in str(c).upper() for k in ["PAGADO", "MONTO"])), df_raw.columns[8] if len(df_raw.columns) > 8 else None)
             col_fdeb = next((c for c in df_raw.columns if any(k in str(c).upper() for k in ["DÉBITO", "DEBITO", "CHEQUE"])), df_raw.columns[14] if len(df_raw.columns) > 14 else None)
-            col_prov = next((c for c in df_raw.columns if "PROVEEDOR" in str(c).upper() and "N" not in str(c).upper()), df_raw.columns[3] if len(df_raw.columns) > 3 else None)
             
             if col_monto and col_fdeb:
                 df_temp = df_raw.copy()
-                # Limpiamos filas vacías basándonos en la primera columna
                 primera_c = df_temp.columns[0]
                 df_temp = df_temp[
                     df_temp[primera_c].notna() & 
@@ -398,15 +395,11 @@ elif menu == "Reportes":
                     (df_temp[primera_c].astype(str).str.lower() != "nan")
                 ].copy()
                 
-                # Convertimos montos y fechas
                 df_temp["_MONTO_NUM"] = pd.to_numeric(df_temp[col_monto], errors='coerce').fillna(0.0)
                 df_temp["_DT"] = pd.to_datetime(df_temp[col_fdeb], errors='coerce')
-                
-                # Creamos la columna de agrupación por Mes/Año (ej: "2027-01 (Enero)")
                 df_temp["MES_DEBITO"] = df_temp["_DT"].dt.to_period('M').astype(str)
                 df_temp = df_temp[df_temp["MES_DEBITO"] != "NaT"].copy()
                 
-                # Agrupamos por Mes y sumamos los montos
                 df_rep = df_temp.groupby("MES_DEBITO")["_MONTO_NUM"].sum().reset_index()
                 df_rep.columns = ["Mes de Débito", "Total Pagado"]
                 df_rep = df_rep.sort_values(by="Mes de Débito")
@@ -418,7 +411,6 @@ elif menu == "Reportes":
         df_rep = obtener_datos(tipo_reporte)
     
     if not df_rep.empty and tipo_reporte != "TESORERÍA - Pagos Ordenados y Acumulados por Mes de Débito":
-        # 1. Descartar filas donde la primera columna esté vacía, sea 0, nan o None
         primera_col = df_rep.columns[0]
         df_rep = df_rep[
             df_rep[primera_col].notna() & 
@@ -427,13 +419,11 @@ elif menu == "Reportes":
             (df_rep[primera_col].astype(str).str.lower() != "nan")
         ].copy()
         
-        # 2. Formatear fechas de manera limpia a Día/Mes/Año
         for col in df_rep.columns:
             col_up = str(col).upper()
             if any(k in col_up for k in ["FECHA", "VENCIMIENTO", "DÉBITO", "DEBITO"]):
                 df_rep[col] = pd.to_datetime(df_rep[col], errors='coerce').dt.strftime('%d/%m/%Y').fillna(df_rep[col])
         
-    # 3. Calcular totales y aplicar formato contable en columnas numéricas/montos (aplica para ambos tipos de tesorería y otros)
     totales_dict = {}
     if not df_rep.empty:
         for col in df_rep.columns:
@@ -444,9 +434,18 @@ elif menu == "Reportes":
                 df_rep[col] = vals_num.apply(lambda x: f"${x:,.2f}")
 
     if not df_rep.empty:
+        # Estilo CSS inyectado para alinear a la derecha todas las celdas numéricas en la interfaz de Streamlit
+        st.markdown("""
+            <style>
+                [data-testid="stDataFrame"] td:nth-child(n+3), 
+                [data-testid="stDataFrame"] th:nth-child(n+3) {
+                    text-align: right !important;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+        
         st.dataframe(df_rep, use_container_width=True)
         
-        # Mostrar Totales en pantalla de forma destacada
         if totales_dict:
             st.markdown("### 📌 Totales del Reporte:")
             cols_totales = st.columns(len(totales_dict))
@@ -456,7 +455,6 @@ elif menu == "Reportes":
         csv = df_rep.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Descargar Reporte en Excel (CSV)", csv, f"{tipo_reporte.lower().replace(' ', '_').replace('(', '').replace(')', '')}.csv", "text/csv")
         
-        # Construcción de la fila de totales para HTML de impresión
         html_totales_tr = ""
         if totales_dict:
             html_totales_tr = "<tr style='font-weight: bold; background-color: #e9ecef;'>"
@@ -469,7 +467,6 @@ elif menu == "Reportes":
                     html_totales_tr += "<td></td>"
             html_totales_tr += "</tr>"
 
-        # HTML con orientación horizontal, montos alineados a la derecha y fila de totales
         html_content = f"""
         <html>
         <head>
@@ -484,7 +481,8 @@ elif menu == "Reportes":
                 table {{ width: 100%; border-collapse: collapse; margin-top: 15px; }}
                 th, td {{ border: 1px solid #bbb; padding: 6px 8px; text-align: left; font-size: 11px; }}
                 th {{ background-color: #f2f2f2; text-align: center; }}
-                td:nth-child(n+3), th:nth-child(n+3) {{ text-align: right; }}
+                /* Fuerza absoluta de alineación a la derecha en la impresión para columnas contables */
+                td:nth-child(n+3), th:nth-child(n+3) {{ text-align: right !important; }}
             </style>
         </head>
         <body>
