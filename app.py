@@ -360,7 +360,8 @@ elif menu == "Reportes":
         "REPORTE FACTURAS",
         "REPORTE COMPROBANTES POR VENCIMIENTO",
         "TESORERÍA - PAGOS (Cheque, Banco y Fecha)",
-        "TESORERÍA - Pagos Ordenados y Acumulados por Mes de Débito"
+        "TESORERÍA - Pagos Ordenados y Acumulados por Mes de Débito",
+        "CONSOLIDADO GENERAL - Suma de Saldos y Cheques de Tesorería"
     ])
     
     st.markdown("---")
@@ -407,10 +408,52 @@ elif menu == "Reportes":
                 df_rep = pd.DataFrame()
         else:
             df_rep = pd.DataFrame()
+            
+    elif tipo_reporte == "CONSOLIDADO GENERAL - Suma de Saldos y Cheques de Tesorería":
+        df_c = obtener_datos("COMPRAS")
+        df_f = obtener_datos("FACTURAS")
+        df_t = obtener_datos("TESORERIA")
+        
+        total_compras = 0.0
+        if not df_c.empty:
+            primera_c = df_c.columns[0]
+            df_c_limpio = df_c[df_c[primera_c].notna() & (df_c[primera_c].astype(str).str.strip() != "") & (df_c[primera_c].astype(str).str.strip() != "0")].copy()
+            col_mc = next((c for c in df_c_limpio.columns if str(c).upper() == "MONTO"), df_c_limpio.columns[4] if len(df_c_limpio.columns) > 4 else None)
+            if col_mc:
+                total_compras = pd.to_numeric(df_c_limpio[col_mc], errors='coerce').fillna(0.0).sum()
+                
+        total_facturas = 0.0
+        if not df_f.empty:
+            primera_f = df_f.columns[0]
+            df_f_limpio = df_f[df_f[primera_f].notna() & (df_f[primera_f].astype(str).str.strip() != "") & (df_f[primera_f].astype(str).str.strip() != "0")].copy()
+            col_mf = next((c for c in df_f_limpio.columns if any(k in str(c).upper() for k in ["MONTO COMP", "MONTO FACTURA"])), df_f_limpio.columns[8] if len(df_f_limpio.columns) > 8 else None)
+            if col_mf:
+                total_facturas = pd.to_numeric(df_f_limpio[col_mf], errors='coerce').fillna(0.0).sum()
+                
+        total_teso_cheques = 0.0
+        if not df_t.empty:
+            primera_t = df_t.columns[0]
+            df_t_limpio = df_t[df_t[primera_t].notna() & (df_t[primera_t].astype(str).str.strip() != "") & (df_t[primera_t].astype(str).str.strip() != "0")].copy()
+            col_pagado = df_t_limpio.columns[8] if len(df_t_limpio.columns) > 8 else None # Columna I
+            col_medio = df_t_limpio.columns[12] if len(df_t_limpio.columns) > 12 else None # Columna M
+            
+            if col_pagado and col_medio:
+                for _, row in df_t_limpio.iterrows():
+                    medio_val = str(row.get(col_medio, "")).strip().lower()
+                    if medio_val == "cheque":
+                        val_pago = pd.to_numeric(row.get(col_pagado), errors='coerce')
+                        if not pd.isna(val_pago):
+                            total_teso_cheques += val_pago
+
+        df_rep = pd.DataFrame([
+            {"Concepto Consolidado": "Suma Total de Órdenes de Compra", "Importe": total_compras},
+            {"Concepto Consolidado": "Suma Total de Comprobantes Facturados", "Importe": total_facturas},
+            {"Concepto Consolidado": "Suma de Pagos de Tesorería (Específico Medio: Cheque)", "Importe": total_teso_cheques}
+        ])
     else:
         df_rep = obtener_datos(tipo_reporte)
     
-    if not df_rep.empty and tipo_reporte != "TESORERÍA - Pagos Ordenados y Acumulados por Mes de Débito":
+    if not df_rep.empty and tipo_reporte not in ["TESORERÍA - Pagos Ordenados y Acumulados por Mes de Débito", "CONSOLIDADO GENERAL - Suma de Saldos y Cheques de Tesorería"]:
         primera_col = df_rep.columns[0]
         df_rep = df_rep[
             df_rep[primera_col].notna() & 
@@ -448,7 +491,6 @@ elif menu == "Reportes":
         csv = df_rep.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Descargar Reporte en Excel (CSV)", csv, f"{tipo_reporte.lower().replace(' ', '_').replace('(', '').replace(')', '')}.csv", "text/csv")
         
-        # Construcción segura de la tabla HTML asegurando clase text-right en columnas de montos
         html_table_rows = ""
         for _, row in df_rep.iterrows():
             html_table_rows += "<tr>"
@@ -457,9 +499,8 @@ elif menu == "Reportes":
                 html_table_rows += f"<td style='{align_style}'>{val}</td>"
             html_table_rows += "</tr>"
             
-        # Fila de totales para la impresión
         html_totales_tr = ""
-        if totales_dict:
+        if totales_dict and tipo_reporte != "CONSOLIDADO GENERAL - Suma de Saldos y Cheques de Tesorería":
             html_totales_tr = "<tr style='font-weight: bold; background-color: #e9ecef;'>"
             for idx, col in enumerate(df_rep.columns):
                 if col in totales_dict:
