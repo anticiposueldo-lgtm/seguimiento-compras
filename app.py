@@ -5,12 +5,19 @@ from datetime import datetime
 
 st.set_page_config(page_title="Seguimiento Cierre Anual", layout="wide")
 
-# Estilo CSS para forzar la alineación a la derecha en las tablas de Streamlit (st.dataframe) para columnas numéricas
+# CSS Avanzado para forzar alineación derecha en montos y números tanto en app como en impresión
 st.markdown("""
     <style>
-    /* Alinear a la derecha las columnas que contengan montos o números */
-    div[data-testid="stDataFrame"] div[data-testid="stTable"] td:nth-child(n+3),
-    div[data-testid="stDataFrame"] th:nth-child(n+3) {
+    /* Forzar alineación a la derecha en la tabla de Streamlit para celdas que contengan $ o números */
+    div[data-testid="stDataFrame"] td, div[data-testid="stDataFrame"] th {
+        text-align: left;
+    }
+    /* Si la celda contiene símbolos de moneda o números, alinear a la derecha */
+    div[data-testid="stDataFrame"] td:has-text("$"),
+    div[data-testid="stDataFrame"] th:has-text("Importe"),
+    div[data-testid="stDataFrame"] th:has-text("Monto"),
+    div[data-testid="stDataFrame"] th:has-text("Saldo"),
+    div[data-testid="stDataFrame"] th:has-text("Total") {
         text-align: right !important;
     }
     </style>
@@ -408,6 +415,11 @@ elif menu == "Reportes":
     df_rep = pd.DataFrame()
     total_general = 0.0
     
+    df_rep_mensual = pd.DataFrame()
+    total_mes_num = 0.0
+    mes_nombre_sel = ""
+    anio_sel = 2026
+    
     if tipo_reporte == "SÍNTESIS FINANCIERA GENERAL":
         monto_comp_pend = 0.0
         if not df_compras.empty:
@@ -552,12 +564,8 @@ elif menu == "Reportes":
             {"Concepto Financiero Mensual": "Facturas No Pagadas a Vencer", "Importe": formatear_moneda(facturas_a_vencer_monto)},
             {"Concepto Financiero Mensual": "Saldo Pendiente de Facturas con Pago Parcial", "Importe": formatear_moneda(parciales_pend_mes)}
         ]
-        df_mes_rep = pd.DataFrame(sintesis_mes_data)
+        df_rep_mensual = pd.DataFrame(sintesis_mes_data)
         total_mes_num = monto_comp_pend_mes + saldo_op_mes + facturas_vencidas_monto + facturas_a_vencer_monto + parciales_pend_mes
-
-        st.markdown(f"##### Resultado para: **{mes_nombre_sel} {anio_sel}**")
-        st.dataframe(df_mes_rep, use_container_width=True)
-        st.markdown(f"### **Total General del Mes:** {formatear_moneda(total_mes_num)}")
 
     elif tipo_reporte == "Facturas Ordenadas por Proveedor":
         if not df_facturas.empty:
@@ -806,15 +814,64 @@ elif menu == "Reportes":
                 df_rep["Total Pagado"] = df_rep["Total Pagado"].apply(formatear_moneda)
                 df_rep["Saldo Pendiente Pago"] = df_rep["Saldo Pendiente Pago"].apply(formatear_moneda)
 
-    # Mostrar tabla, totales y opciones de impresión / descarga para TODOS los reportes
-    if not df_rep.empty:
+    # Mostrar tablas, totales y opciones de exportación/impresión para TODOS los reportes
+    if tipo_reporte == "SÍNTESIS FINANCIERA GENERAL":
+        st.markdown("### 📊 Síntesis Anual General")
+        st.dataframe(df_rep, use_container_width=True)
+        st.markdown(f"### **Total General Anual:** {total_general}")
+        
+        csv_anual = df_rep.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Descargar Síntesis Anual en Excel (CSV)", csv_anual, "sintesis_anual.csv", "text/csv")
+        
+        st.markdown("---")
+        st.markdown(f"### 📅 Desglose Mensual: {mes_nombre_sel} {anio_sel}")
+        st.dataframe(df_mes_rep, use_container_width=True)
+        st.markdown(f"### **Total General del Mes:** {formatear_moneda(total_mes_num)}")
+        
+        csv_mensual = df_mes_rep.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Descargar Desglose Mensual en Excel (CSV)", csv_mensual, f"sintesis_{mes_nombre_sel}_{anio_sel}.csv", "text/csv")
+        
+        html_content = f"""
+        <html>
+        <head>
+            <title>Municipalidad de Sunchales - Síntesis Financiera</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; padding: 20px; }}
+                h2, h3 {{ text-align: center; color: #333; }}
+                table {{ width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 30px; }}
+                th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }}
+                th {{ background-color: #f2f2f2; }}
+                td:nth-child(n+2), th:nth-child(n+2) {{ text-align: right; }}
+                .total {{ margin-top: 10px; font-size: 14px; font-weight: bold; text-align: right; }}
+            </style>
+        </head>
+        <body>
+            <h2>Municipalidad de Sunchales</h2>
+            <h3>Seguimiento Financiero - Síntesis Financiera General</h3>
+            
+            <h4>Síntesis Anual General</h4>
+            {df_rep.to_html(index=False, classes='table')}
+            <div class="total">Total General Anual: {total_general}</div>
+
+            <h4>Desglose Mensual: {mes_nombre_sel} {anio_sel}</h4>
+            {df_mes_rep.to_html(index=False, classes='table')}
+            <div class="total">Total General del Mes: {formatear_moneda(total_mes_num)}</div>
+            
+            <script>window.print();</script>
+        </body>
+        </html>
+        """
+        st.markdown("---")
+        if st.button("🖨️ Imprimir / Guardar Síntesis Completa como PDF"):
+            st.components.v1.html(html_content, height=700)
+
+    elif not df_rep.empty:
         st.dataframe(df_rep, use_container_width=True)
         st.markdown(f"### **Total General:** {total_general}")
         
         csv = df_rep.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Descargar Reporte en Excel (CSV)", csv, "reporte_financiero.csv", "text/csv")
         
-        # HTML con CSS para alinear números a la derecha y dar formato contable limpio al imprimir o exportar PDF
         html_content = f"""
         <html>
         <head>
@@ -825,7 +882,7 @@ elif menu == "Reportes":
                 table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
                 th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }}
                 th {{ background-color: #f2f2f2; }}
-                /* Alineación a la derecha y formato numérico para columnas con montos/números */
+                /* Alineación a la derecha automática para columnas numéricas y monetarias */
                 td:nth-child(n+3), th:nth-child(n+3) {{ text-align: right; }}
                 .total {{ margin-top: 20px; font-size: 16px; font-weight: bold; text-align: right; }}
             </style>
@@ -845,3 +902,4 @@ elif menu == "Reportes":
             st.components.v1.html(html_content, height=600)
     else:
         st.info("No hay datos disponibles para este reporte con los filtros actuales.")
+        
