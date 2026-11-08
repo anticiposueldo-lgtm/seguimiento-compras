@@ -509,8 +509,8 @@ elif menu == "Reportes":
             df_cp = df_compras[(df_compras["PROVEEDOR"].astype(str) != "ANULADO") & (~df_compras[col_oc_c].astype(str).str.strip().isin(facturadas_set))].copy()
             if not df_cp.empty and col_f_c:
                 df_cp["_dt"] = pd.to_datetime(df_cp[col_f_c], errors='coerce')
-                # ACUMULADO: Fecha menor o igual al último día del mes seleccionado
-                df_cp_acum = df_cp[df_cp["_dt"] < fecha_limite]
+                # ACUMULADO: Fecha válida y menor al límite
+                df_cp_acum = df_cp[df_cp["_dt"].notnull() & (df_cp["_dt"] < fecha_limite)]
                 monto_comp_pend_mes = pd.to_numeric(df_cp_acum[col_m_c], errors='coerce').fillna(0.0).sum()
 
         # 2. Saldo de órdenes parciales ACUMULADAS hasta el mes seleccionado
@@ -540,7 +540,7 @@ elif menu == "Reportes":
             
             if not df_f_np.empty and col_venc and col_m_fac:
                 df_f_np["_dt_venc"] = pd.to_datetime(df_f_np[col_venc], errors='coerce')
-                df_f_acum = df_f_np[df_f_np["_dt_venc"] < fecha_limite]
+                df_f_acum = df_f_np[df_f_np["_dt_venc"].notnull() & (df_f_np["_dt_venc"] < fecha_limite)]
                 
                 for _, frow in df_f_acum.iterrows():
                     monto_f = float(frow[col_m_fac] or 0.0)
