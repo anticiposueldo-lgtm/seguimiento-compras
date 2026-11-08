@@ -449,9 +449,9 @@ elif menu == "Reportes":
                             total_teso_cheques += val_pago
 
         df_rep = pd.DataFrame([
-            {"Concepto Consolidado": "Suma de Reporte OC (Columna J)", "Importe": total_oc_j},
-            {"Concepto Consolidado": "Suma de Reporte Facturas (Columna G)", "Importe": total_fac_g},
-            {"Concepto Consolidado": "Suma de Tesorería - Pagos con Cheque (Col. I con Col. M = Cheque)", "Importe": total_teso_cheques}
+            {"Concepto Consolidado": "Total Órdenes de Compra", "Importe": total_oc_j},
+            {"Concepto Consolidado": "Total Facturas", "Importe": total_fac_g},
+            {"Concepto Consolidado": "Total Pagos con Cheque", "Importe": total_teso_cheques}
         ])
     else:
         df_rep = obtener_datos(tipo_reporte)
