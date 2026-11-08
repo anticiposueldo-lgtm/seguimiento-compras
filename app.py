@@ -433,15 +433,21 @@ elif menu == "Reportes":
         
     st.markdown("---")
 
-    def es_fecha_valida(val_fecha):
-        if val_fecha is None or str(val_fecha).strip() in ["", "nan", "NaT", "None"]:
+def es_fecha_valida(val_fecha):
+        if val_fecha is None:
             return False, None
-        dt = pd.to_datetime(val_fecha, errors='coerce', dayfirst=True)
-        if pd.isnull(dt):
-            dt = pd.to_datetime(val_fecha, errors='coerce', dayfirst=False)
-        if pd.isnull(dt):
+        val_str = str(val_fecha).strip()
+        if val_str in ["", "nan", "NaT", "None", "NAT"]:
             return False, None
-        return True, dt
+        try:
+            dt = pd.to_datetime(val_str, errors='coerce', dayfirst=True)
+            if pd.isnull(dt):
+                dt = pd.to_datetime(val_str, errors='coerce', dayfirst=False)
+            if pd.isnull(dt):
+                return False, None
+            return True, dt
+        except Exception:
+            return False, None
 
     def cumple_criterio_fecha(val_fecha):
         if "1." in sub_menu_sintesis:
@@ -450,61 +456,63 @@ elif menu == "Reportes":
         if not val or dt is None:
             return False 
         
-        if mes_num_sel == 12:
-            fecha_limite = datetime(anio_sel + 1, 1, 1)
-        else:
-            fecha_limite = datetime(anio_sel, mes_num_sel + 1, 1)
-            
-        if "2." in sub_menu_sintesis:
-            return dt < fecha_limite
-        else:
-            return dt.year == anio_sel and dt.month == mes_num_sel
+        try:
+            if mes_num_sel == 12:
+                fecha_limite = datetime(anio_sel + 1, 1, 1)
+            else:
+                fecha_limite = datetime(anio_sel, mes_num_sel + 1, 1)
+                
+            if "2." in sub_menu_sintesis:
+                return dt < fecha_limite
+            else:
+                return dt.year == anio_sel and dt.month == mes_num_sel
+        except Exception:
+            return False
 
     df_rep = pd.DataFrame()
     total_general_num = 0.0
 
-    def obtener_columna(df, posibles_nombres):
+    def obtener_columna(df, posibles_nombres, indice_por_defecto):
+        if df.empty:
+            return df.columns[indice_por_defecto] if len(df.columns) > indice_por_defecto else None
         for col in df.columns:
+            col_upper = str(col).strip().upper()
             for p in posibles_nombres:
-                if p in col:
+                if p.upper() in col_upper:
                     return col
-        return None
+        if len(df.columns) > indice_por_defecto:
+            return df.columns[indice_por_defecto]
+        return df.columns[0]
 
-    c_oc_compra, c_fecha_compra, c_monto_compra = "NUMERO ORDEN DE COMPRAS", "FECHA", "MONTO"
-    c_oc_fac, c_n_fac, c_m_fac, c_venc, c_prov_fac = "", "", "", "", ""
-    c_n_fac_t, c_m_pago_t, c_medio, c_banco, c_f_deb, c_prov_teso = "", "", "", "", "", ""
+    c_oc_compra = obtener_columna(df_compras, ["ORDEN", "N° ORDEN", "NUMERO ORDEN"], 0)
+    c_fecha_compra = obtener_columna(df_compras, ["FECHA"], 1)
+    c_monto_compra = obtener_columna(df_compras, ["MONTO", "IMPORTE", "TOTAL"], 4)
 
-    if not df_compras.empty:
-        c_oc_compra = obtener_columna(df_compras, ["NUMERO ORDEN", "ORDEN", "N ORDEN"]) or df_compras.columns[0]
-        c_fecha_compra = obtener_columna(df_compras, ["FECHA"]) or df_compras.columns[1]
-        c_monto_compra = obtener_columna(df_compras, ["MONTO"]) or df_compras.columns[4]
+    c_oc_fac = obtener_columna(df_facturas, ["ORDEN", "N° ORDEN"], 0)
+    c_n_fac = obtener_columna(df_facturas, ["FACTURA", "N° FACTURA", "NUMERO"], 6)
+    c_m_fac = obtener_columna(df_facturas, ["MONTO", "IMPORTE"], 8)
+    c_venc = obtener_columna(df_facturas, ["VENCIMIENTO", "VTO"], 9)
+    c_prov_fac = obtener_columna(df_facturas, ["PROVEEDOR"], 3)
 
-    if not df_facturas.empty:
-        c_oc_fac = obtener_columna(df_facturas, ["ORDEN"]) or df_facturas.columns[0]
-        c_n_fac = obtener_columna(df_facturas, ["N FACTURA", "NUMERO FACTURA", "FACTURA"]) or df_facturas.columns[6]
-        c_m_fac = obtener_columna(df_facturas, ["MONTO"]) or df_facturas.columns[8]
-        c_venc = obtener_columna(df_facturas, ["VENCIMIENTO"]) or df_facturas.columns[9]
-        c_prov_fac = obtener_columna(df_facturas, ["PROVEEDOR"]) or df_facturas.columns[3]
-
-    if not df_tesoreria.empty:
-        c_n_fac_t = obtener_columna(df_tesoreria, ["FACTURA", "N FACTURA"]) or df_tesoreria.columns[6]
-        c_m_pago_t = obtener_columna(df_tesoreria, ["PAGADO", "MONTO"]) or df_tesoreria.columns[8]
-        c_medio = obtener_columna(df_tesoreria, ["MEDIO"]) or df_tesoreria.columns[12]
-        c_banco = obtener_columna(df_tesoreria, ["BANCO"]) or df_tesoreria.columns[13]
-        c_f_deb = obtener_columna(df_tesoreria, ["DÉBITO", "DEBITO", "CHEQUE"]) or df_tesoreria.columns[14]
-        c_prov_teso = obtener_columna(df_tesoreria, ["PROVEEDOR"]) or df_tesoreria.columns[3]
+    c_n_fac_t = obtener_columna(df_tesoreria, ["FACTURA", "N° FACTURA"], 6)
+    c_m_pago_t = obtener_columna(df_tesoreria, ["PAGADO", "MONTO", "IMPORTE"], 8)
+    c_medio = obtener_columna(df_tesoreria, ["MEDIO"], 12)
+    c_banco = obtener_columna(df_tesoreria, ["BANCO"], 13)
+    c_f_deb = obtener_columna(df_tesoreria, ["DÉBITO", "DEBITO", "CHEQUE", "FECHA"], 14)
+    c_prov_teso = obtener_columna(df_tesoreria, ["PROVEEDOR"], 3)
 
     if tipo_reporte == "SÍNTESIS FINANCIERA GENERAL":
         monto_comp_pend = 0.0
         if not df_compras.empty and not df_facturas.empty:
-            facturadas_set = set(df_facturas[c_oc_fac].astype(str).str.strip())
-            df_cp = df_compras[(df_compras["PROVEEDOR"].astype(str) != "ANULADO") & (~df_compras[c_oc_compra].astype(str).str.strip().isin(facturadas_set))]
-            if "1." not in sub_menu_sintesis:
-                df_cp = df_cp[df_cp[c_fecha_compra].apply(lambda x: cumple_criterio_fecha(x))]
-            monto_comp_pend = pd.to_numeric(df_cp[c_monto_compra], errors='coerce').fillna(0.0).sum()
+            facturadas_set = set(df_facturas[c_oc_fac].astype(str).str.strip()) if c_oc_fac else set()
+            df_cp = df_compras[(df_compras["PROVEEDOR"].astype(str) != "ANULADO") & (~df_compras[c_oc_compra].astype(str).str.strip().isin(facturadas_set))] if c_oc_compra else df_compras
+            if "1." not in sub_menu_sintesis and c_fecha_compra:
+                df_cp = df_cp[df_cp[c_fecha_compra].apply(cumple_criterio_fecha)]
+            if c_monto_compra and not df_cp.empty:
+                monto_comp_pend = pd.to_numeric(df_cp[c_monto_compra], errors='coerce').fillna(0.0).sum()
 
         saldo_op_total = 0.0
-        if not df_compras.empty and not df_facturas.empty:
+        if not df_compras.empty and not df_facturas.empty and c_oc_compra and c_monto_compra and c_oc_fac and c_m_fac:
             for _, c_row in df_compras.iterrows():
                 if str(c_row.get("PROVEEDOR")) == "ANULADO":
                     continue
@@ -519,32 +527,32 @@ elif menu == "Reportes":
                     saldo_op_total += s_pend
 
         facturas_no_pagadas_monto = 0.0
-        if not df_facturas.empty:
-            pagadas_set = set(df_tesoreria[c_n_fac_t].astype(str).str.strip()) if not df_tesoreria.empty else set()
+        if not df_facturas.empty and c_n_fac and c_m_fac:
+            pagadas_set = set(df_tesoreria[c_n_fac_t].astype(str).str.strip()) if not df_tesoreria.empty and c_n_fac_t else set()
             df_f_np = df_facturas[~df_facturas[c_n_fac].astype(str).str.strip().isin(pagadas_set)]
-            if "1." not in sub_menu_sintesis:
-                df_f_np = df_f_np[df_f_np[c_venc].apply(lambda x: cumple_criterio_fecha(x))]
+            if "1." not in sub_menu_sintesis and c_venc:
+                df_f_np = df_f_np[df_f_np[c_venc].apply(cumple_criterio_fecha)]
             facturas_no_pagadas_monto = pd.to_numeric(df_f_np[c_m_fac], errors='coerce').fillna(0.0).sum()
 
         parciales_pend_monto = 0.0
-        if not df_facturas.empty:
+        if not df_facturas.empty and c_n_fac and c_m_fac:
             for _, f_row in df_facturas.iterrows():
                 if "1." not in sub_menu_sintesis and not cumple_criterio_fecha(f_row.get(c_venc)):
                     continue
                 n_f = str(f_row.get(c_n_fac)).strip()
                 m_f = float(f_row.get(c_m_fac, 0.0) or 0.0)
                 t_pag = 0.0
-                if not df_tesoreria.empty:
+                if not df_tesoreria.empty and c_n_fac_t and c_m_pago_t:
                     pagos_f = df_tesoreria[df_tesoreria[c_n_fac_t].astype(str).str.strip() == n_f]
                     t_pag = sum([float(p.get(c_m_pago_t, 0.0) or 0.0) for _, p in pagos_f.iterrows()])
                 if 0 < t_pag < m_f:
                     parciales_pend_monto += (m_f - t_pag)
 
         cheques_monto = 0.0
-        if not df_tesoreria.empty and c_medio:
+        if not df_tesoreria.empty and c_medio and c_m_pago_t:
             df_ch = df_tesoreria[df_tesoreria[c_medio].astype(str).str.strip().str.lower() == "cheque"]
-            if "1." not in sub_menu_sintesis:
-                df_ch = df_ch[df_ch[c_f_deb].apply(lambda x: cumple_criterio_fecha(x))]
+            if "1." not in sub_menu_sintesis and c_f_deb:
+                df_ch = df_ch[df_ch[c_f_deb].apply(cumple_criterio_fecha)]
             cheques_monto = pd.to_numeric(df_ch[c_m_pago_t], errors='coerce').fillna(0.0).sum()
 
         df_rep = pd.DataFrame([
@@ -559,8 +567,8 @@ elif menu == "Reportes":
     elif tipo_reporte == "Facturas Ordenadas por Proveedor":
         if not df_facturas.empty:
             df_temp = df_facturas.copy()
-            if "1." not in sub_menu_sintesis:
-                df_temp = df_temp[df_temp[c_venc].apply(lambda x: cumple_criterio_fecha(x))]
+            if "1." not in sub_menu_sintesis and c_venc:
+                df_temp = df_temp[df_temp[c_venc].apply(cumple_criterio_fecha)]
             if not df_temp.empty:
                 df_temp[c_m_fac] = pd.to_numeric(df_temp[c_m_fac], errors='coerce').fillna(0.0)
                 df_rep = df_temp.sort_values(by=c_prov_fac).copy()
@@ -573,8 +581,8 @@ elif menu == "Reportes":
     elif tipo_reporte == "Facturas Ordenadas por Fecha de Vencimiento":
         if not df_facturas.empty:
             df_temp = df_facturas.copy()
-            if "1." not in sub_menu_sintesis:
-                df_temp = df_temp[df_temp[c_venc].apply(lambda x: cumple_criterio_fecha(x))]
+            if "1." not in sub_menu_sintesis and c_venc:
+                df_temp = df_temp[df_temp[c_venc].apply(cumple_criterio_fecha)]
             if not df_temp.empty:
                 df_temp[c_m_fac] = pd.to_numeric(df_temp[c_m_fac], errors='coerce').fillna(0.0)
                 df_temp_fecha = pd.to_datetime(df_temp[c_venc], errors='coerce', dayfirst=True)
@@ -592,7 +600,7 @@ elif menu == "Reportes":
             df_cheques = df_tesoreria[df_tesoreria[c_medio].astype(str).str.strip().str.lower() == "cheque"].copy()
             if not df_cheques.empty and c_f_deb:
                 if "1." not in sub_menu_sintesis:
-                    df_cheques = df_cheques[df_cheques[c_f_deb].apply(lambda x: cumple_criterio_fecha(x))]
+                    df_cheques = df_cheques[df_cheques[c_f_deb].apply(cumple_criterio_fecha)]
                 if not df_cheques.empty:
                     df_cheques[c_m_pago_t] = pd.to_numeric(df_cheques[c_m_pago_t], errors='coerce').fillna(0.0)
                     df_temp_fdeb = pd.to_datetime(df_cheques[c_f_deb], errors='coerce', dayfirst=True)
@@ -611,8 +619,8 @@ elif menu == "Reportes":
             df_validas = df_compras[df_compras["PROVEEDOR"].astype(str) != "ANULADO"].copy()
             df_pendientes = df_validas[~df_validas[c_oc_compra].astype(str).str.strip().isin(facturadas)].copy()
             if not df_pendientes.empty:
-                if "1." not in sub_menu_sintesis:
-                    df_pendientes = df_pendientes[df_pendientes[c_fecha_compra].apply(lambda x: cumple_criterio_fecha(x))]
+                if "1." not in sub_menu_sintesis and c_fecha_compra:
+                    df_pendientes = df_pendientes[df_pendientes[c_fecha_compra].apply(cumple_criterio_fecha)]
                 if not df_pendientes.empty:
                     df_pendientes[c_monto_compra] = pd.to_numeric(df_pendientes[c_monto_compra], errors='coerce').fillna(0.0)
                     df_pendientes[c_fecha_compra] = pd.to_datetime(df_pendientes[c_fecha_compra], errors='coerce', dayfirst=True).dt.strftime('%d/%m/%Y').fillna(df_pendientes[c_fecha_compra])
@@ -626,8 +634,8 @@ elif menu == "Reportes":
             df_validas = df_compras[df_compras["PROVEEDOR"].astype(str) != "ANULADO"].copy()
             df_pendientes = df_validas[~df_validas[c_oc_compra].astype(str).str.strip().isin(facturadas)].copy()
             if not df_pendientes.empty:
-                if "1." not in sub_menu_sintesis:
-                    df_pendientes = df_pendientes[df_pendientes[c_fecha_compra].apply(lambda x: cumple_criterio_fecha(x))]
+                if "1." not in sub_menu_sintesis and c_fecha_compra:
+                    df_pendientes = df_pendientes[df_pendientes[c_fecha_compra].apply(cumple_criterio_fecha)]
                 if not df_pendientes.empty:
                     df_pendientes[c_monto_compra] = pd.to_numeric(df_pendientes[c_monto_compra], errors='coerce').fillna(0.0)
                     df_pendientes["MES"] = pd.to_datetime(df_pendientes[c_fecha_compra], errors='coerce', dayfirst=True).dt.to_period('M').astype(str)
@@ -665,6 +673,62 @@ elif menu == "Reportes":
                 df_rep["Monto Total OC"] = df_rep["Monto Total OC"].apply(formatear_moneda)
                 df_rep["Total Facturado"] = df_rep["Total Facturado"].apply(formatear_moneda)
                 df_rep["Saldo Disponible"] = df_rep["Saldo Disponible"].apply(formatear_moneda)
+
+    elif tipo_reporte == "Consolidado: Facturas No Pagadas (Sin Tesorería)":
+        if not df_facturas.empty:
+            facturas_pagadas = set(df_tesoreria[c_n_fac_t].astype(str).str.strip()) if not df_tesoreria.empty else set()
+            df_temp = df_facturas[~df_facturas[c_n_fac].astype(str).str.strip().isin(facturas_pagadas)].copy()
+            if not df_temp.empty:
+                if "1." not in sub_menu_sintesis and c_venc:
+                    df_temp = df_temp[df_temp[c_venc].apply(cumple_criterio_fecha)]
+                if not df_temp.empty:
+                    df_temp[c_m_fac] = pd.to_numeric(df_temp[c_m_fac], errors='coerce').fillna(0.0)
+                    df_temp[c_venc] = pd.to_datetime(df_temp[c_venc], errors='coerce', dayfirst=True).dt.strftime('%d/%m/%Y').fillna(df_temp[c_venc])
+                    df_rep = df_temp.copy()
+                    total_general_num = df_rep[c_m_fac].sum()
+                    df_rep[c_m_fac] = df_rep[c_m_fac].apply(formatear_moneda)
+
+    elif tipo_reporte == "Consolidado: Pagos con Cheques a la Fecha":
+        if not df_tesoreria.empty and c_medio:
+            df_cheques = df_tesoreria[df_tesoreria[c_medio].astype(str).str.strip().str.lower() == "cheque"].copy()
+            if not df_cheques.empty:
+                if "1." not in sub_menu_sintesis and c_f_deb:
+                    df_cheques = df_cheques[df_cheques[c_f_deb].apply(cumple_criterio_fecha)]
+                if not df_cheques.empty:
+                    df_cheques[c_m_pago_t] = pd.to_numeric(df_cheques[c_m_pago_t], errors='coerce').fillna(0.0)
+                    df_temp_fdeb = pd.to_datetime(df_cheques[c_f_deb], errors='coerce', dayfirst=True)
+                    df_cheques[c_f_deb] = df_temp_fdeb.dt.strftime('%d/%m/%Y').fillna(df_cheques[c_f_deb])
+                    df_rep = df_cheques.copy()
+                    total_general_num = df_cheques[c_m_pago_t].sum()
+                    df_rep[c_m_pago_t] = df_rep[c_m_pago_t].apply(formatear_moneda)
+
+    elif tipo_reporte == "Consolidado: Facturas con Pago Parcial Pendiente":
+        if not df_facturas.empty:
+            datos_parciales_teso = []
+            for _, fac in df_facturas.iterrows():
+                if "1." not in sub_menu_sintesis and not cumple_criterio_fecha(fac.get(c_venc)):
+                    continue
+                n_fac = str(fac.get(c_n_fac)).strip()
+                monto_fac = float(fac.get(c_m_fac, 0.0) or 0.0)
+                total_pagado = 0.0
+                if not df_tesoreria.empty:
+                    pagos = df_tesoreria[df_tesoreria[c_n_fac_t].astype(str).str.strip() == n_fac]
+                    total_pagado = sum([float(p.get(c_m_pago_t, 0.0) or 0.0) for _, p in pagos.iterrows()])
+                saldo_restante = monto_fac - total_pagado
+                if 0 < total_pagado < monto_fac:
+                    datos_parciales_teso.append({
+                        "N° Factura": n_fac,
+                        "Proveedor": fac.get(c_prov_fac),
+                        "Monto Factura": monto_fac,
+                        "Total Pagado": total_pagado,
+                        "Saldo Pendiente Pago": saldo_restante
+                    })
+            if datos_parciales_teso:
+                df_rep = pd.DataFrame(datos_parciales_teso)
+                total_general_num = df_rep["Saldo Pendiente Pago"].sum()
+                df_rep["Monto Factura"] = df_rep["Monto Factura"].apply(formatear_moneda)
+                df_rep["Total Pagado"] = df_rep["Total Pagado"].apply(formatear_moneda)
+                df_rep["Saldo Pendiente Pago"] = df_rep["Saldo Pendiente Pago"].apply(formatear_moneda)
 
     elif tipo_reporte == "Consolidado: Facturas No Pagadas (Sin Tesorería)":
         if not df_facturas.empty:
