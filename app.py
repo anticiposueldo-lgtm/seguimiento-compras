@@ -499,6 +499,16 @@ elif menu == "Reportes":
 
         hoy = datetime.now()
         
+        # Función auxiliar segura para evaluar fechas acumuladas sin errores de tipo
+        def es_fecha_valida_y_menor(val_fecha, limite):
+            try:
+                dt = pd.to_datetime(val_fecha, errors='coerce')
+                if pd.notnull(dt):
+                    return dt < limite
+            except:
+                pass
+            return False
+
         # 1. Órdenes de compra sin factura ACUMULADAS hasta el mes seleccionado
         monto_comp_pend_mes = 0.0
         if not df_compras.empty:
@@ -508,10 +518,12 @@ elif menu == "Reportes":
             facturadas_set = set(df_facturas.iloc[:, 0].astype(str).str.strip()) if not df_facturas.empty else set()
             df_cp = df_compras[(df_compras["PROVEEDOR"].astype(str) != "ANULADO") & (~df_compras[col_oc_c].astype(str).str.strip().isin(facturadas_set))].copy()
             if not df_cp.empty and col_f_c:
-                df_cp["_dt"] = pd.to_datetime(df_cp[col_f_c], errors='coerce')
-                # ACUMULADO: Fecha válida y menor al límite
-                df_cp_acum = df_cp[df_cp["_dt"].notnull() & (df_cp["_dt"] < fecha_limite)]
-                monto_comp_pend_mes = pd.to_numeric(df_cp_acum[col_m_c], errors='coerce').fillna(0.0).sum()
+                for _, row in df_cp.iterrows():
+                    if es_fecha_valida_y_menor(row.get(col_f_c), fecha_limite):
+                        try:
+                            monto_comp_pend_mes += float(row.get(col_m_c, 0.0) or 0.0)
+                        except:
+                            pass
 
         # 2. Saldo de órdenes parciales ACUMULADAS hasta el mes seleccionado
         saldo_op_mes = 0.0
@@ -519,8 +531,7 @@ elif menu == "Reportes":
             for _, c_row in df_compras.iterrows():
                 if str(c_row.get("PROVEEDOR")) == "ANULADO":
                     continue
-                f_oc = pd.to_datetime(c_row.iloc[1], errors='coerce')
-                if pd.notnull(f_oc) and f_oc < fecha_limite:
+                if es_fecha_valida_y_menor(c_row.iloc[1], fecha_limite):
                     n_oc = str(c_row.iloc[0]).strip()
                     m_oc = float(c_row.iloc[4] or 0.0)
                     facs_match = df_facturas[df_facturas.iloc[:, 0].astype(str).str.strip() == n_oc]
@@ -539,24 +550,25 @@ elif menu == "Reportes":
             col_m_fac = df_facturas.columns[8] if len(df_facturas.columns) > 8 else None
             
             if not df_f_np.empty and col_venc and col_m_fac:
-                df_f_np["_dt_venc"] = pd.to_datetime(df_f_np[col_venc], errors='coerce')
-                df_f_acum = df_f_np[df_f_np["_dt_venc"].notnull() & (df_f_np["_dt_venc"] < fecha_limite)]
-                
-                for _, frow in df_f_acum.iterrows():
-                    monto_f = float(frow[col_m_fac] or 0.0)
-                    dt_v = frow["_dt_venc"]
-                    if pd.notnull(dt_v):
-                        if dt_v < hoy:
-                            facturas_vencidas_monto += monto_f
-                        else:
-                            facturas_a_vencer_monto += monto_f
+                for _, frow in df_f_np.iterrows():
+                    val_venc = frow.get(col_venc)
+                    if es_fecha_valida_y_menor(val_venc, fecha_limite):
+                        try:
+                            monto_f = float(frow.get(col_m_fac, 0.0) or 0.0)
+                            dt_v = pd.to_datetime(val_venc, errors='coerce')
+                            if dt_v < hoy:
+                                facturas_vencidas_monto += monto_f
+                            else:
+                                facturas_a_vencer_monto += monto_f
+                        except:
+                            pass
 
         # 5. Saldo parcial de facturas con pago parcial ACUMULADO
         parciales_pend_mes = 0.0
         if not df_facturas.empty:
             for _, f_row in df_facturas.iterrows():
-                dt_v = pd.to_datetime(f_row.iloc[9], errors='coerce') if len(f_row) > 9 else None
-                if pd.notnull(dt_v) and dt_v < fecha_limite:
+                val_venc = f_row.iloc[9] if len(f_row) > 9 else None
+                if es_fecha_valida_y_menor(val_venc, fecha_limite):
                     n_f = str(f_row.iloc[6]).strip()
                     m_f = float(f_row.iloc[8] or 0.0)
                     t_pag = 0.0
@@ -913,4 +925,3 @@ elif menu == "Reportes":
             st.components.v1.html(html_content, height=600)
     else:
         st.info("No hay datos disponibles para este reporte con los filtros actuales.")
-        
