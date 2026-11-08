@@ -1,12 +1,20 @@
 import streamlit as st
 import pandas as pd
 import requests
+from datetime import datetime
 
 st.set_page_config(page_title="Seguimiento Cierre Anual", layout="wide")
 
 st.title("📊 Panel de Compras y Pagos")
 
 WEB_APP_URL = "https://script.google.com/macros/s/AKfycbx64d_-HsdEofZLzLg3EQ58DeS_2ESQ5PlbTdKp4ObxkRHcQgtmdNJ1MIcFyjjDRELJ1Q/exec"
+
+def formatear_moneda(valor):
+    try:
+        val = float(valor)
+        return f"${val:,.2f}"
+    except:
+        return "$0.00"
 
 def obtener_datos(sheet_name):
     try:
@@ -100,7 +108,6 @@ if menu == "Compras":
     estados_disponibles = ["Pendiente","Anulada"]
     idx_estado = estados_disponibles.index(default_estado) if default_estado in estados_disponibles else 0
 
-    # Formato de fecha en orden DD/MM/YYYY para guardado visual limpio
     fecha = st.date_input("FECHA")
     fecha_str = fecha.strftime("%d/%m/%Y")
 
@@ -183,16 +190,13 @@ elif menu == "Facturas":
             st.info("Datos recuperados de la Orden de Compra:")
             col1, col2, col3 = st.columns(3)
             col1.write(f"**Proveedor:** {datos_orden.get('PROVEEDOR', '')}")
-            
-            monto_compra_fmt = f"${monto_compra_total:,.2f}"
-            col2.write(f"**Monto Compra:** {monto_compra_fmt}")
-            
+            col2.write(f"**Monto Compra:** {formatear_moneda(monto_compra_total)}")
             col3.write(f"**Estado Actual:** {estado_actual_fac}")
             
             if total_facturado_previo > 0:
-                st.warning(f"⚠️ Ya se facturó un total de **${total_facturado_previo:,.2f}** para esta orden.")
+                st.warning(f"⚠️ Ya se facturó un total de **{formatear_moneda(total_facturado_previo)}** para esta orden.")
             
-            st.markdown(f"### 💵 Monto disponible para facturar: **${monto_disponible:,.2f}**")
+            st.markdown(f"### 💵 Monto disponible para facturar: **{formatear_moneda(monto_disponible)}**")
             
             with st.form("form_facturas", clear_on_submit=True):
                 st.subheader("Completar datos de Facturación y Estado")
@@ -310,11 +314,11 @@ elif menu == "Tesorería":
                     if not proveedor_nombre and len(datos_factura) > 3:
                         proveedor_nombre = str(list(datos_factura.values())[3])
                     
-                    st.info(f"**Proveedor:** {proveedor_nombre} | **Monto Total Factura:** ${monto_fac_val:,.2f}")
+                    st.info(f"**Proveedor:** {proveedor_nombre} | **Monto Total Factura:** {formatear_moneda(monto_fac_val)}")
                     if monto_pagado_previo > 0:
-                        st.warning(f"⚠️ Esta factura ya tiene pagos parciales registrados por un total de **${monto_pagado_previo:,.2f}**.")
+                        st.warning(f"⚠️ Esta factura ya tiene pagos parciales registrados por un total de **{formatear_moneda(monto_pagado_previo)}**.")
                     
-                    st.markdown(f"### 💵 El monto a pagar de esta Factura es: **${monto_restante:,.2f}**")
+                    st.markdown(f"### 💵 El monto a pagar de esta Factura es: **{formatear_moneda(monto_restante)}**")
                     
                     with st.form("form_tesoreria", clear_on_submit=True):
                         st.subheader("Completar datos de Pago")
@@ -441,15 +445,117 @@ elif menu == "Reportes":
                 cheques_monto = pd.to_numeric(df_ch.iloc[:, 8], errors='coerce').fillna(0.0).sum()
                 
         sintesis_data = [
-            {"Concepto Financiero": "Monto de Compras Pendientes (Sin Factura)", "Importe Total": monto_comp_pend},
-            {"Concepto Financiero": "Saldo Pendiente de Órdenes Parciales", "Importe Total": saldo_op_total},
-            {"Concepto Financiero": "Facturas No Pagadas (Sin Registro en Tesorería)", "Importe Total": facturas_no_pagadas_monto},
-            {"Concepto Financiero": "Saldo Pendiente de Facturas con Pago Parcial", "Importe Total": parciales_pend_monto},
-            {"Concepto Financiero": "Total de Cheques Emitidos a Debitar", "Importe Total": cheques_monto}
+            {"Concepto Financiero": "Monto de Compras Pendientes (Sin Factura)", "Importe Total": formatear_moneda(monto_comp_pend)},
+            {"Concepto Financiero": "Saldo Pendiente de Órdenes Parciales", "Importe Total": formatear_moneda(saldo_op_total)},
+            {"Concepto Financiero": "Facturas No Pagadas (Sin Registro en Tesorería)", "Importe Total": formatear_moneda(facturas_no_pagadas_monto)},
+            {"Concepto Financiero": "Saldo Pendiente de Facturas con Pago Parcial", "Importe Total": formatear_moneda(parciales_pend_monto)},
+            {"Concepto Financiero": "Total de Cheques Emitidos a Debitar", "Importe Total": formatear_moneda(cheques_monto)}
         ]
         
         df_rep = pd.DataFrame(sintesis_data)
-        total_general = df_rep["Importe Total"].sum()
+        total_general_num = monto_comp_pend + saldo_op_total + facturas_no_pagadas_monto + parciales_pend_monto + cheques_monto
+        total_general = formatear_moneda(total_general_num)
+
+        # ----------------------------------------------------
+        # SUB-REPORTE / SÍNTESIS MENSUAL DETALLADA
+        # ----------------------------------------------------
+        st.markdown("---")
+        st.markdown("### 📅 Filtrar Síntesis Financiera por Mes y Año")
+        col_anio, col_mes = st.columns(2)
+        
+        anos_disponibles = [2025, 2026, 2027, 2028]
+        anio_sel = col_anio.selectbox("Seleccione el Año:", anos_disponibles, index=1)
+        
+        meses_dict = {
+            "Enero": 1, "Febrero": 2, "Marzo": 3, "Abril": 4, "Mayo": 5, "Junio": 6,
+            "Julio": 7, "Agosto": 8, "Septiembre": 9, "Octubre": 10, "Noviembre": 11, "Diciembre": 12
+        }
+        mes_nombre_sel = col_mes.selectbox("Seleccione el Mes:", list(meses_dict.keys()))
+        mes_num_sel = meses_dict[mes_nombre_sel]
+        
+        # Procesamiento filtrado por mes/año seleccionado
+        hoy = datetime.now()
+        
+        # 1. Órdenes de compra sin factura (por mes de la OC)
+        monto_comp_pend_mes = 0.0
+        if not df_compras.empty:
+            col_oc_c = df_compras.columns[0]
+            col_f_c = df_compras.columns[1]
+            col_m_c = df_compras.columns[4]
+            facturadas_set = set(df_facturas.iloc[:, 0].astype(str).str.strip()) if not df_facturas.empty else set()
+            df_cp = df_compras[(df_compras["PROVEEDOR"].astype(str) != "ANULADO") & (~df_compras[col_oc_c].astype(str).str.strip().isin(facturadas_set))].copy()
+            if not df_cp.empty and col_f_c:
+                df_cp["_dt"] = pd.to_datetime(df_cp[col_f_c], errors='coerce')
+                df_cp_mes = df_cp[(df_cp["_dt"].dt.year == anio_sel) & (df_cp["_dt"].dt.month == mes_num_sel)]
+                monto_comp_pend_mes = pd.to_numeric(df_cp_mes[col_m_c], errors='coerce').fillna(0.0).sum()
+
+        # 2. Saldo de órdenes parciales (por mes de la OC)
+        saldo_op_mes = 0.0
+        if not df_compras.empty and not df_facturas.empty:
+            for _, c_row in df_compras.iterrows():
+                if str(c_row.get("PROVEEDOR")) == "ANULADO":
+                    continue
+                f_oc = pd.to_datetime(c_row.iloc[1], errors='coerce')
+                if pd.notnull(f_oc) and f_oc.year == anio_sel and f_oc.month == mes_num_sel:
+                    n_oc = str(c_row.iloc[0]).strip()
+                    m_oc = float(c_row.iloc[4] or 0.0)
+                    facs_match = df_facturas[df_facturas.iloc[:, 0].astype(str).str.strip() == n_oc]
+                    t_fac = sum([float(x or 0.0) for x in facs_match.iloc[:, 8]]) if not facs_match.empty else 0.0
+                    s_pend = m_oc - t_fac
+                    if t_fac > 0 and s_pend > 0:
+                        saldo_op_mes += s_pend
+
+        # 3 y 4. Facturas no pagadas divididas en Vencidas y A Vencer (por mes de Vencimiento)
+        facturas_vencidas_monto = 0.0
+        facturas_a_vencer_monto = 0.0
+        if not df_facturas.empty:
+            pagadas_set = set(df_tesoreria.iloc[:, 6].astype(str).str.strip()) if not df_tesoreria.empty else set()
+            df_f_np = df_facturas[~df_facturas.iloc[:, 6].astype(str).str.strip().isin(pagadas_set)].copy()
+            col_venc = df_facturas.columns[9] if len(df_facturas.columns) > 9 else None
+            col_m_fac = df_facturas.columns[8] if len(df_facturas.columns) > 8 else None
+            
+            if not df_f_np.empty and col_venc and col_m_fac:
+                df_f_np["_dt_venc"] = pd.to_datetime(df_f_np[col_venc], errors='coerce')
+                df_f_mes = df_f_np[(df_f_np["_dt_venc"].dt.year == anio_sel) & (df_f_np["_dt_venc"].dt.month == mes_num_sel)]
+                
+                for _, frow in df_f_mes.iterrows():
+                    monto_f = float(frow[col_m_fac] or 0.0)
+                    dt_v = frow["_dt_venc"]
+                    if pd.notnull(dt_v):
+                        if dt_v < hoy:
+                            facturas_vencidas_monto += monto_f
+                        else:
+                            facturas_a_vencer_monto += monto_f
+
+        # 5. Saldo parcial de facturas con pago parcial (por mes de comprobante o vencimiento)
+        parciales_pend_mes = 0.0
+        if not df_facturas.empty:
+            col_venc = df_facturas.columns[9] if len(df_facturas.columns) > 9 else None
+            for _, f_row in df_facturas.iterrows():
+                dt_v = pd.to_datetime(f_row.iloc[9], errors='coerce') if len(f_row) > 9 else None
+                if pd.notnull(dt_v) and dt_v.year == anio_sel and dt_v.month == mes_num_sel:
+                    n_f = str(f_row.iloc[6]).strip()
+                    m_f = float(f_row.iloc[8] or 0.0)
+                    t_pag = 0.0
+                    if not df_tesoreria.empty:
+                        pagos_f = df_tesoreria[df_tesoreria.iloc[:, 6].astype(str).str.strip() == n_f]
+                        t_pag = sum([float(p.iloc[8] or 0.0) for _, p in pagos_f.iterrows()])
+                    if 0 < t_pag < m_f:
+                        parciales_pend_mes += (m_f - t_pag)
+
+        sintesis_mes_data = [
+            {"Concepto Financiero Mensual": "Monto de Órdenes de Compra Sin Factura", "Importe": formatear_moneda(monto_comp_pend_mes)},
+            {"Concepto Financiero Mensual": "Saldo de Órdenes de Compra Parciales", "Importe": formatear_moneda(saldo_op_mes)},
+            {"Concepto Financiero Mensual": "Facturas No Pagadas Vencidas", "Importe": formatear_moneda(facturas_vencidas_monto)},
+            {"Concepto Financiero Mensual": "Facturas No Pagadas a Vencer", "Importe": formatear_moneda(facturas_a_vencer_monto)},
+            {"Concepto Financiero Mensual": "Saldo Pendiente de Facturas con Pago Parcial", "Importe": formatear_moneda(parciales_pend_mes)}
+        ]
+        df_mes_rep = pd.DataFrame(sintesis_mes_data)
+        total_mes_num = monto_comp_pend_mes + saldo_op_mes + facturas_vencidas_monto + facturas_a_vencer_monto + parciales_pend_mes
+
+        st.markdown(f"##### Resultado para: **{mes_nombre_sel} {anio_sel}**")
+        st.dataframe(df_mes_rep, use_container_width=True)
+        st.markdown(f"### **Total General del Mes:** {formatear_moneda(total_mes_num)}")
 
     elif tipo_reporte == "Facturas Ordenadas por Proveedor":
         if not df_facturas.empty:
@@ -461,13 +567,14 @@ elif menu == "Reportes":
                 df_rep = df_facturas.copy()
                 df_rep[col_monto] = pd.to_numeric(df_rep[col_monto], errors='coerce').fillna(0.0)
                 
-                # Limpieza de formato fecha a DD/MM/YYYY
                 if col_venc:
                     df_rep[col_venc] = pd.to_datetime(df_rep[col_venc], errors='coerce').dt.strftime('%d/%m/%Y').fillna(df_rep[col_venc])
 
                 df_rep = df_rep.sort_values(by=col_prov)
                 df_rep = df_rep[[col_prov, 'N FACTURA', col_monto, col_venc]]
-                total_general = df_rep[col_monto].sum()
+                total_general_num = df_rep[col_monto].sum()
+                total_general = formatear_moneda(total_general_num)
+                df_rep[col_monto] = df_rep[col_monto].apply(formatear_moneda)
             else:
                 st.warning("No se encontraron las columnas necesarias en la hoja Facturas.")
         else:
@@ -483,7 +590,6 @@ elif menu == "Reportes":
                 df_rep = df_facturas.copy()
                 df_rep[col_monto] = pd.to_numeric(df_rep[col_monto], errors='coerce').fillna(0.0)
                 
-                # Conversión temporal para ordenar correctamente y formatear a DD/MM/YYYY
                 df_temp_fecha = pd.to_datetime(df_rep[col_venc], errors='coerce')
                 df_rep["_temp_sort"] = df_temp_fecha
                 df_rep = df_rep.sort_values(by="_temp_sort")
@@ -492,7 +598,9 @@ elif menu == "Reportes":
                 df_rep[col_venc] = df_temp_fecha.dt.strftime('%d/%m/%Y').fillna(df_rep[col_venc])
                 
                 df_rep = df_rep[[col_venc, col_prov, 'N FACTURA', col_monto]]
-                total_general = df_rep[col_monto].sum()
+                total_general_num = df_rep[col_monto].sum()
+                total_general = formatear_moneda(total_general_num)
+                df_rep[col_monto] = df_rep[col_monto].apply(formatear_moneda)
             else:
                 st.warning("No se encontraron las columnas necesarias en la hoja Facturas.")
         else:
@@ -503,7 +611,7 @@ elif menu == "Reportes":
             col_medio = next((c for c in df_tesoreria.columns if "MEDIO" in c.upper()), df_tesoreria.columns[12] if len(df_tesoreria.columns) > 12 else None)
             col_banco = next((c for c in df_tesoreria.columns if "BANCO" in c.upper()), df_tesoreria.columns[13] if len(df_tesoreria.columns) > 13 else None)
             col_f_deb = next((c for c in df_tesoreria.columns if "DÉBITO" in c.upper() or "DEBITO" in c.upper() or "CHEQUE" in c.upper()), df_tesoreria.columns[14] if len(df_tesoreria.columns) > 14 else None)
-            col_m_pago = next((c for c in df_tesoreria.columns if "PAGO" in c.upper() and c.upper() != "MEDIO DE PAGO"), df_tesoreria.columns[8] if len(df_tesoreria.columns) > 8 else None)
+            col_m_pago = df_tesoreria.columns[8] if len(df_tesoreria.columns) > 8 else None # Columna I (monto pagado)
             col_prov = next((c for c in df_tesoreria.columns if "PROVEEDOR" in c.upper() and "N" not in c.upper()), df_tesoreria.columns[3] if len(df_tesoreria.columns) > 3 else None)
             
             if col_medio:
@@ -520,8 +628,11 @@ elif menu == "Reportes":
                         df_cheques[col_f_deb] = df_temp_fdeb.dt.strftime('%d/%m/%Y').fillna(df_cheques[col_f_deb])
                     
                     columnas_mostrar = [c for c in [col_f_deb, col_prov, col_m_pago, col_banco, 'N FACTURA'] if c in df_cheques.columns]
-                    df_rep = df_cheques[columnas_mostrar]
-                    total_general = df_cheques[col_m_pago].sum() if col_m_pago else 0.0
+                    df_rep = df_cheques[columnas_mostrar].copy()
+                    total_general_num = df_cheques[col_m_pago].sum() if col_m_pago else 0.0
+                    total_general = formatear_moneda(total_general_num)
+                    if col_m_pago in df_rep.columns:
+                        df_rep[col_m_pago] = df_rep[col_m_pago].apply(formatear_moneda)
                 else:
                     st.info("No hay registros de pagos realizados con Cheque.")
             else:
@@ -548,8 +659,11 @@ elif menu == "Reportes":
                     df_pendientes[col_monto_oc] = pd.to_numeric(df_pendientes[col_monto_oc], errors='coerce').fillna(0.0)
                 if col_fecha_c:
                     df_pendientes[col_fecha_c] = pd.to_datetime(df_pendientes[col_fecha_c], errors='coerce').dt.strftime('%d/%m/%Y').fillna(df_pendientes[col_fecha_c])
-                df_rep = df_pendientes
-                total_general = df_pendientes[col_monto_oc].sum() if col_monto_oc else 0.0
+                df_rep = df_pendientes.copy()
+                total_general_num = df_pendientes[col_monto_oc].sum() if col_monto_oc else 0.0
+                total_general = formatear_moneda(total_general_num)
+                if col_monto_oc:
+                    df_rep[col_monto_oc] = df_rep[col_monto_oc].apply(formatear_moneda)
             else:
                 st.success("✅ ¡Todas las órdenes de compra ya tienen facturas asociadas!")
         else:
@@ -574,7 +688,9 @@ elif menu == "Reportes":
                 df_pendientes["MES"] = pd.to_datetime(df_pendientes[col_fecha], errors='coerce').dt.to_period('M').astype(str)
                 df_rep = df_pendientes.groupby("MES")[col_monto_oc].sum().reset_index()
                 df_rep.columns = ["Mes", "Monto Pendiente de Factura"]
-                total_general = df_rep["Monto Pendiente de Factura"].sum()
+                total_general_num = df_rep["Monto Pendiente de Factura"].sum()
+                total_general = formatear_moneda(total_general_num)
+                df_rep["Monto Pendiente de Factura"] = df_rep["Monto Pendiente de Factura"].apply(formatear_moneda)
 
     elif tipo_reporte == "Consolidado: Saldo de Órdenes Parciales":
         if not df_compras.empty and not df_facturas.empty:
@@ -612,7 +728,11 @@ elif menu == "Reportes":
             
             if datos_parciales:
                 df_rep = pd.DataFrame(datos_parciales)
-                total_general = df_rep["Saldo Disponible"].sum()
+                total_general_num = df_rep["Saldo Disponible"].sum()
+                total_general = formatear_moneda(total_general_num)
+                df_rep["Monto Total OC"] = df_rep["Monto Total OC"].apply(formatear_moneda)
+                df_rep["Total Facturado"] = df_rep["Total Facturado"].apply(formatear_moneda)
+                df_rep["Saldo Disponible"] = df_rep["Saldo Disponible"].apply(formatear_moneda)
 
     elif tipo_reporte == "Consolidado: Facturas No Pagadas (Sin Tesorería)":
         if not df_facturas.empty:
@@ -628,7 +748,9 @@ elif menu == "Reportes":
                 df_rep[col_m_fac] = pd.to_numeric(df_rep[col_m_fac], errors='coerce').fillna(0.0)
                 if col_venc:
                     df_rep[col_venc] = pd.to_datetime(df_rep[col_venc], errors='coerce').dt.strftime('%d/%m/%Y').fillna(df_rep[col_venc])
-                total_general = df_rep[col_m_fac].sum()
+                total_general_num = df_rep[col_m_fac].sum()
+                total_general = formatear_moneda(total_general_num)
+                df_rep[col_m_fac] = df_rep[col_m_fac].apply(formatear_moneda)
 
     elif tipo_reporte == "Consolidado: Pagos con Cheques a la Fecha":
         if not df_tesoreria.empty:
@@ -643,8 +765,10 @@ elif menu == "Reportes":
                     if col_f_deb:
                         df_cheques[col_f_deb] = pd.to_datetime(df_cheques[col_f_deb], errors='coerce').dt.strftime('%d/%m/%Y').fillna(df_cheques[col_f_deb])
                         
-                    df_rep = df_cheques
-                    total_general = df_cheques[col_monto_pago].sum()
+                    df_rep = df_cheques.copy()
+                    total_general_num = df_cheques[col_monto_pago].sum()
+                    total_general = formatear_moneda(total_general_num)
+                    df_rep[col_monto_pago] = df_rep[col_monto_pago].apply(formatear_moneda)
 
     elif tipo_reporte == "Consolidado: Facturas con Pago Parcial Pendiente":
         if not df_facturas.empty:
@@ -674,12 +798,16 @@ elif menu == "Reportes":
             
             if datos_parciales_teso:
                 df_rep = pd.DataFrame(datos_parciales_teso)
-                total_general = df_rep["Saldo Pendiente Pago"].sum()
+                total_general_num = df_rep["Saldo Pendiente Pago"].sum()
+                total_general = formatear_moneda(total_general_num)
+                df_rep["Monto Factura"] = df_rep["Monto Factura"].apply(formatear_moneda)
+                df_rep["Total Pagado"] = df_rep["Total Pagado"].apply(formatear_moneda)
+                df_rep["Saldo Pendiente Pago"] = df_rep["Saldo Pendiente Pago"].apply(formatear_moneda)
 
     # Mostrar tabla y totales si hay datos
-    if not df_rep.empty:
+    if tipo_reporte != "SÍNTESIS FINANCIERA GENERAL" and not df_rep.empty:
         st.dataframe(df_rep, use_container_width=True)
-        st.markdown(f"### **Total General:** ${total_general:,.2f}")
+        st.markdown(f"### **Total General:** {total_general}")
         
         csv = df_rep.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Descargar Reporte en Excel (CSV)", csv, "reporte_financiero.csv", "text/csv")
@@ -701,7 +829,7 @@ elif menu == "Reportes":
             <h2>Municipalidad de Sunchales</h2>
             <h3>Seguimiento Financiero - {tipo_reporte}</h3>
             {df_rep.to_html(index=False, classes='table')}
-            <div class="total">Total General: ${total_general:,.2f}</div>
+            <div class="total">Total General: {total_general}</div>
             <script>window.print();</script>
         </body>
         </html>
@@ -710,6 +838,9 @@ elif menu == "Reportes":
         st.markdown("---")
         if st.button("🖨️ Imprimir / Guardar como PDF"):
             st.components.v1.html(html_content, height=600)
+    elif tipo_reporte == "SÍNTESIS FINANCIERA GENERAL":
+        st.dataframe(df_rep, use_container_width=True)
+        st.markdown(f"### **Total General:** {total_general}")
     else:
         st.info("No hay datos disponibles para este reporte con los filtros actuales.")
         
