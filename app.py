@@ -359,7 +359,8 @@ elif menu == "Reportes":
         "REPORTE OC",
         "REPORTE FACTURAS",
         "REPORTE COMPROBANTES POR VENCIMIENTO",
-        "TESORERÍA - PAGOS (Cheque, Banco y Fecha)"
+        "TESORERÍA - PAGOS (Cheque, Banco y Fecha)",
+        "TESORERÍA - Pagos Ordenados y Acumulados por Mes de Débito"
     ])
     
     st.markdown("---")
@@ -372,16 +373,51 @@ elif menu == "Reportes":
             cols_deseadas = []
             for c in df_raw.columns:
                 c_up = str(c).upper()
-                # Incluimos explícitamente "PAGADO", "MONTO" y las demás columnas clave
                 if any(x in c_up for x in ["PROVEEDOR", "PAGADO", "MONTO", "MEDIO", "BANCO", "DÉBITO", "DEBITO", "CHEQUE", "FACTURA", "ORDEN"]):
                     cols_deseadas.append(c)
             df_rep = df_raw[cols_deseadas].copy() if cols_deseadas else df_raw.copy()
         else:
             df_rep = pd.DataFrame()
+            
+    elif tipo_reporte == "TESORERÍA - Pagos Ordenados y Acumulados por Mes de Débito":
+        df_raw = obtener_datos("TESORERIA")
+        if not df_raw.empty:
+            # Buscamos las columnas clave de monto pagado y fecha débito
+            col_monto = next((c for c in df_raw.columns if any(k in str(c).upper() for k in ["PAGADO", "MONTO"])), df_raw.columns[8] if len(df_raw.columns) > 8 else None)
+            col_fdeb = next((c for c in df_raw.columns if any(k in str(c).upper() for k in ["DÉBITO", "DEBITO", "CHEQUE"])), df_raw.columns[14] if len(df_raw.columns) > 14 else None)
+            col_prov = next((c for c in df_raw.columns if "PROVEEDOR" in str(c).upper() and "N" not in str(c).upper()), df_raw.columns[3] if len(df_raw.columns) > 3 else None)
+            
+            if col_monto and col_fdeb:
+                df_temp = df_raw.copy()
+                # Limpiamos filas vacías basándonos en la primera columna
+                primera_c = df_temp.columns[0]
+                df_temp = df_temp[
+                    df_temp[primera_c].notna() & 
+                    (df_temp[primera_c].astype(str).str.strip() != "") & 
+                    (df_temp[primera_c].astype(str).str.strip() != "0") & 
+                    (df_temp[primera_c].astype(str).str.lower() != "nan")
+                ].copy()
+                
+                # Convertimos montos y fechas
+                df_temp["_MONTO_NUM"] = pd.to_numeric(df_temp[col_monto], errors='coerce').fillna(0.0)
+                df_temp["_DT"] = pd.to_datetime(df_temp[col_fdeb], errors='coerce')
+                
+                # Creamos la columna de agrupación por Mes/Año (ej: "2027-01 (Enero)")
+                df_temp["MES_DEBITO"] = df_temp["_DT"].dt.to_period('M').astype(str)
+                df_temp = df_temp[df_temp["MES_DEBITO"] != "NaT"].copy()
+                
+                # Agrupamos por Mes y sumamos los montos
+                df_rep = df_temp.groupby("MES_DEBITO")["_MONTO_NUM"].sum().reset_index()
+                df_rep.columns = ["Mes de Débito", "Total Pagado"]
+                df_rep = df_rep.sort_values(by="Mes de Débito")
+            else:
+                df_rep = pd.DataFrame()
+        else:
+            df_rep = pd.DataFrame()
     else:
         df_rep = obtener_datos(tipo_reporte)
     
-    if not df_rep.empty:
+    if not df_rep.empty and tipo_reporte != "TESORERÍA - Pagos Ordenados y Acumulados por Mes de Débito":
         # 1. Descartar filas donde la primera columna esté vacía, sea 0, nan o None
         primera_col = df_rep.columns[0]
         df_rep = df_rep[
@@ -397,8 +433,9 @@ elif menu == "Reportes":
             if any(k in col_up for k in ["FECHA", "VENCIMIENTO", "DÉBITO", "DEBITO"]):
                 df_rep[col] = pd.to_datetime(df_rep[col], errors='coerce').dt.strftime('%d/%m/%Y').fillna(df_rep[col])
         
-        # 3. Calcular totales y aplicar formato contable en columnas numéricas/montos
-        totales_dict = {}
+    # 3. Calcular totales y aplicar formato contable en columnas numéricas/montos (aplica para ambos tipos de tesorería y otros)
+    totales_dict = {}
+    if not df_rep.empty:
         for col in df_rep.columns:
             col_up = str(col).upper()
             if any(k in col_up for k in ["MONTO", "PAGADO", "TOTAL", "IMPORTE", "SALDO"]):
