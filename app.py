@@ -5,14 +5,12 @@ from datetime import datetime
 
 st.set_page_config(page_title="Seguimiento Cierre Anual", layout="wide")
 
-# CSS Avanzado para forzar alineación derecha en montos y números tanto en app como en impresión
+# Estilo CSS para forzar la alineación a la derecha en las columnas numéricas y monetarias de Streamlit
 st.markdown("""
     <style>
-    /* Forzar alineación a la derecha en la tabla de Streamlit para celdas que contengan $ o números */
     div[data-testid="stDataFrame"] td, div[data-testid="stDataFrame"] th {
         text-align: left;
     }
-    /* Si la celda contiene símbolos de moneda o números, alinear a la derecha */
     div[data-testid="stDataFrame"] td:has-text("$"),
     div[data-testid="stDataFrame"] th:has-text("Importe"),
     div[data-testid="stDataFrame"] th:has-text("Monto"),
@@ -814,7 +812,7 @@ elif menu == "Reportes":
                 df_rep["Total Pagado"] = df_rep["Total Pagado"].apply(formatear_moneda)
                 df_rep["Saldo Pendiente Pago"] = df_rep["Saldo Pendiente Pago"].apply(formatear_moneda)
 
-    # Mostrar tablas, totales y opciones de exportación/impresión para TODOS los reportes
+    # Renderizado y opciones de exportación/impresión
     if tipo_reporte == "SÍNTESIS FINANCIERA GENERAL":
         st.markdown("### 📊 Síntesis Anual General")
         st.dataframe(df_rep, use_container_width=True)
@@ -825,11 +823,14 @@ elif menu == "Reportes":
         
         st.markdown("---")
         st.markdown(f"### 📅 Desglose Mensual: {mes_nombre_sel} {anio_sel}")
-        st.dataframe(df_mes_rep, use_container_width=True)
-        st.markdown(f"### **Total General del Mes:** {formatear_moneda(total_mes_num)}")
-        
-        csv_mensual = df_mes_rep.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Descargar Desglose Mensual en Excel (CSV)", csv_mensual, f"sintesis_{mes_nombre_sel}_{anio_sel}.csv", "text/csv")
+        if not df_rep_mensual.empty:
+            st.dataframe(df_rep_mensual, use_container_width=True)
+            st.markdown(f"### **Total General del Mes:** {formatear_moneda(total_mes_num)}")
+            
+            csv_mensual = df_rep_mensual.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Descargar Desglose Mensual en Excel (CSV)", csv_mensual, f"sintesis_{mes_nombre_sel}_{anio_sel}.csv", "text/csv")
+        else:
+            st.info("No hay datos para el mes seleccionado.")
         
         html_content = f"""
         <html>
@@ -837,7 +838,7 @@ elif menu == "Reportes":
             <title>Municipalidad de Sunchales - Síntesis Financiera</title>
             <style>
                 body {{ font-family: Arial, sans-serif; padding: 20px; }}
-                h2, h3 {{ text-align: center; color: #333; }}
+                h2, h3, h4 {{ text-align: center; color: #333; }}
                 table {{ width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 30px; }}
                 th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }}
                 th {{ background-color: #f2f2f2; }}
@@ -854,7 +855,7 @@ elif menu == "Reportes":
             <div class="total">Total General Anual: {total_general}</div>
 
             <h4>Desglose Mensual: {mes_nombre_sel} {anio_sel}</h4>
-            {df_mes_rep.to_html(index=False, classes='table')}
+            {df_rep_mensual.to_html(index=False, classes='table') if not df_rep_mensual.empty else "<p>Sin datos</p>"}
             <div class="total">Total General del Mes: {formatear_moneda(total_mes_num)}</div>
             
             <script>window.print();</script>
@@ -882,7 +883,6 @@ elif menu == "Reportes":
                 table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
                 th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }}
                 th {{ background-color: #f2f2f2; }}
-                /* Alineación a la derecha automática para columnas numéricas y monetarias */
                 td:nth-child(n+3), th:nth-child(n+3) {{ text-align: right; }}
                 .total {{ margin-top: 20px; font-size: 16px; font-weight: bold; text-align: right; }}
             </style>
