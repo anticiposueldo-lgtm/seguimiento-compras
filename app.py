@@ -410,26 +410,29 @@ elif menu == "Reportes":
             df_rep = pd.DataFrame()
             
     elif tipo_reporte == "CONSOLIDADO GENERAL - Suma de Saldos y Cheques de Tesorería":
-        df_c = obtener_datos("COMPRAS")
-        df_f = obtener_datos("FACTURAS")
+        df_oc = obtener_datos("REPORTE OC")
+        df_fac = obtener_datos("REPORTE FACTURAS")
         df_t = obtener_datos("TESORERIA")
         
-        total_compras = 0.0
-        if not df_c.empty:
-            primera_c = df_c.columns[0]
-            df_c_limpio = df_c[df_c[primera_c].notna() & (df_c[primera_c].astype(str).str.strip() != "") & (df_c[primera_c].astype(str).str.strip() != "0")].copy()
-            col_mc = next((c for c in df_c_limpio.columns if str(c).upper() == "MONTO"), df_c_limpio.columns[4] if len(df_c_limpio.columns) > 4 else None)
-            if col_mc:
-                total_compras = pd.to_numeric(df_c_limpio[col_mc], errors='coerce').fillna(0.0).sum()
+        # 1. Suma de Columna J (índice 9) en Reporte OC
+        total_oc_j = 0.0
+        if not df_oc.empty:
+            primera_oc = df_oc.columns[0]
+            df_oc_limpio = df_oc[df_oc[primera_oc].notna() & (df_oc[primera_oc].astype(str).str.strip() != "") & (df_oc[primera_oc].astype(str).str.strip() != "0")].copy()
+            col_j = df_oc_limpio.columns[9] if len(df_oc_limpio.columns) > 9 else None
+            if col_j:
+                total_oc_j = pd.to_numeric(df_oc_limpio[col_j], errors='coerce').fillna(0.0).sum()
                 
-        total_facturas = 0.0
-        if not df_f.empty:
-            primera_f = df_f.columns[0]
-            df_f_limpio = df_f[df_f[primera_f].notna() & (df_f[primera_f].astype(str).str.strip() != "") & (df_f[primera_f].astype(str).str.strip() != "0")].copy()
-            col_mf = next((c for c in df_f_limpio.columns if any(k in str(c).upper() for k in ["MONTO COMP", "MONTO FACTURA"])), df_f_limpio.columns[8] if len(df_f_limpio.columns) > 8 else None)
-            if col_mf:
-                total_facturas = pd.to_numeric(df_f_limpio[col_mf], errors='coerce').fillna(0.0).sum()
+        # 2. Suma de Columna G (índice 6) en Reporte Facturas
+        total_fac_g = 0.0
+        if not df_fac.empty:
+            primera_fac = df_fac.columns[0]
+            df_fac_limpio = df_fac[df_fac[primera_fac].notna() & (df_fac[primera_fac].astype(str).str.strip() != "") & (df_fac[primera_fac].astype(str).str.strip() != "0")].copy()
+            col_g = df_fac_limpio.columns[6] if len(df_fac_limpio.columns) > 6 else None
+            if col_g:
+                total_fac_g = pd.to_numeric(df_fac_limpio[col_g], errors='coerce').fillna(0.0).sum()
                 
+        # 3. Suma de Columna I (Pagado) en Tesorería solo si Columna M es "Cheque"
         total_teso_cheques = 0.0
         if not df_t.empty:
             primera_t = df_t.columns[0]
@@ -446,9 +449,9 @@ elif menu == "Reportes":
                             total_teso_cheques += val_pago
 
         df_rep = pd.DataFrame([
-            {"Concepto Consolidado": "Suma Total de Órdenes de Compra", "Importe": total_compras},
-            {"Concepto Consolidado": "Suma Total de Comprobantes Facturados", "Importe": total_facturas},
-            {"Concepto Consolidado": "Suma de Pagos de Tesorería (Específico Medio: Cheque)", "Importe": total_teso_cheques}
+            {"Concepto Consolidado": "Suma de Reporte OC (Columna J)", "Importe": total_oc_j},
+            {"Concepto Consolidado": "Suma de Reporte Facturas (Columna G)", "Importe": total_fac_g},
+            {"Concepto Consolidado": "Suma de Tesorería - Pagos con Cheque (Col. I con Col. M = Cheque)", "Importe": total_teso_cheques}
         ])
     else:
         df_rep = obtener_datos(tipo_reporte)
