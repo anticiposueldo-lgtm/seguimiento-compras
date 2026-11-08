@@ -425,25 +425,18 @@ elif menu == "Reportes":
                 df_rep[col] = pd.to_datetime(df_rep[col], errors='coerce').dt.strftime('%d/%m/%Y').fillna(df_rep[col])
         
     totales_dict = {}
+    cols_numericas_idx = []
+    
     if not df_rep.empty:
-        for col in df_rep.columns:
+        for idx, col in enumerate(df_rep.columns):
             col_up = str(col).upper()
             if any(k in col_up for k in ["MONTO", "PAGADO", "TOTAL", "IMPORTE", "SALDO"]):
+                cols_numericas_idx.append(idx)
                 vals_num = pd.to_numeric(df_rep[col], errors='coerce').fillna(0.0)
                 totales_dict[col] = vals_num.sum()
                 df_rep[col] = vals_num.apply(lambda x: f"${x:,.2f}")
 
     if not df_rep.empty:
-        # Estilo CSS inyectado para alinear a la derecha todas las celdas numéricas en la interfaz de Streamlit
-        st.markdown("""
-            <style>
-                [data-testid="stDataFrame"] td:nth-child(n+3), 
-                [data-testid="stDataFrame"] th:nth-child(n+3) {
-                    text-align: right !important;
-                }
-            </style>
-        """, unsafe_allow_html=True)
-        
         st.dataframe(df_rep, use_container_width=True)
         
         if totales_dict:
@@ -455,17 +448,29 @@ elif menu == "Reportes":
         csv = df_rep.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Descargar Reporte en Excel (CSV)", csv, f"{tipo_reporte.lower().replace(' ', '_').replace('(', '').replace(')', '')}.csv", "text/csv")
         
+        # Construcción segura de la tabla HTML asegurando clase text-right en columnas de montos
+        html_table_rows = ""
+        for _, row in df_rep.iterrows():
+            html_table_rows += "<tr>"
+            for idx, val in enumerate(row):
+                align_style = "text-align: right;" if idx in cols_numericas_idx else "text-align: left;"
+                html_table_rows += f"<td style='{align_style}'>{val}</td>"
+            html_table_rows += "</tr>"
+            
+        # Fila de totales para la impresión
         html_totales_tr = ""
         if totales_dict:
             html_totales_tr = "<tr style='font-weight: bold; background-color: #e9ecef;'>"
-            for col in df_rep.columns:
+            for idx, col in enumerate(df_rep.columns):
                 if col in totales_dict:
                     html_totales_tr += f"<td style='text-align: right;'>${totales_dict[col]:,.2f}</td>"
-                elif col == df_rep.columns[0]:
-                    html_totales_tr += "<td>TOTAL GENERAL</td>"
+                elif idx == 0:
+                    html_totales_tr += "<td style='text-align: left;'>TOTAL GENERAL</td>"
                 else:
-                    html_totales_tr += "<td></td>"
+                    html_totales_tr += "<td style='text-align: left;'></td>"
             html_totales_tr += "</tr>"
+
+        th_headers = "".join([f"<th style='text-align: {'right' if i in cols_numericas_idx else 'center'};'>{c}</th>" for i, c in enumerate(df_rep.columns)])
 
         html_content = f"""
         <html>
@@ -479,16 +484,20 @@ elif menu == "Reportes":
                 body {{ font-family: Arial, sans-serif; padding: 10px; }}
                 h2, h4 {{ text-align: center; color: #333; margin: 5px 0; }}
                 table {{ width: 100%; border-collapse: collapse; margin-top: 15px; }}
-                th, td {{ border: 1px solid #bbb; padding: 6px 8px; text-align: left; font-size: 11px; }}
-                th {{ background-color: #f2f2f2; text-align: center; }}
-                /* Fuerza absoluta de alineación a la derecha en la impresión para columnas contables */
-                td:nth-child(n+3), th:nth-child(n+3) {{ text-align: right !important; }}
+                th, td {{ border: 1px solid #bbb; padding: 6px 8px; font-size: 11px; }}
+                th {{ background-color: #f2f2f2; }}
             </style>
         </head>
         <body>
             <h2>Municipalidad de Sunchales</h2>
             <h4>Seguimiento Financiero - {tipo_reporte}</h4>
-            {df_rep.to_html(index=False, classes='table', escape=False).replace("</tbody>", html_totales_tr + "</tbody>")}
+            <table>
+                <thead><tr>{th_headers}</tr></thead>
+                <tbody>
+                    {html_table_rows}
+                    {html_totales_tr}
+                </tbody>
+            </table>
             <script>
                 window.onload = function() {{
                     window.print();
