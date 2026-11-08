@@ -5,6 +5,17 @@ from datetime import datetime
 
 st.set_page_config(page_title="Seguimiento Cierre Anual", layout="wide")
 
+# Estilo CSS para forzar la alineación a la derecha en las tablas de Streamlit (st.dataframe) para columnas numéricas
+st.markdown("""
+    <style>
+    /* Alinear a la derecha las columnas que contengan montos o números */
+    div[data-testid="stDataFrame"] div[data-testid="stTable"] td:nth-child(n+3),
+    div[data-testid="stDataFrame"] th:nth-child(n+3) {
+        text-align: right !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 st.title("📊 Panel de Compras y Pagos")
 
 WEB_APP_URL = "https://script.google.com/macros/s/AKfycbx64d_-HsdEofZLzLg3EQ58DeS_2ESQ5PlbTdKp4ObxkRHcQgtmdNJ1MIcFyjjDRELJ1Q/exec"
@@ -795,15 +806,15 @@ elif menu == "Reportes":
                 df_rep["Total Pagado"] = df_rep["Total Pagado"].apply(formatear_moneda)
                 df_rep["Saldo Pendiente Pago"] = df_rep["Saldo Pendiente Pago"].apply(formatear_moneda)
 
-    # Mostrar tabla, totales y opciones de impresión / descarga con alineación contable a la derecha
-    if tipo_reporte != "SÍNTESIS FINANCIERA GENERAL" and not df_rep.empty:
+    # Mostrar tabla, totales y opciones de impresión / descarga para TODOS los reportes
+    if not df_rep.empty:
         st.dataframe(df_rep, use_container_width=True)
         st.markdown(f"### **Total General:** {total_general}")
         
         csv = df_rep.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Descargar Reporte en Excel (CSV)", csv, "reporte_financiero.csv", "text/csv")
         
-        # HTML con CSS para alinear números a la derecha en formato contable para la impresión / PDF
+        # HTML con CSS para alinear números a la derecha y dar formato contable limpio al imprimir o exportar PDF
         html_content = f"""
         <html>
         <head>
@@ -814,7 +825,7 @@ elif menu == "Reportes":
                 table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
                 th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }}
                 th {{ background-color: #f2f2f2; }}
-                /* Alineación a la derecha para columnas que contengan montos o números con $ */
+                /* Alineación a la derecha y formato numérico para columnas con montos/números */
                 td:nth-child(n+3), th:nth-child(n+3) {{ text-align: right; }}
                 .total {{ margin-top: 20px; font-size: 16px; font-weight: bold; text-align: right; }}
             </style>
@@ -832,9 +843,5 @@ elif menu == "Reportes":
         st.markdown("---")
         if st.button("🖨️ Imprimir / Guardar como PDF"):
             st.components.v1.html(html_content, height=600)
-    elif tipo_reporte == "SÍNTESIS FINANCIERA GENERAL":
-        st.dataframe(df_rep, use_container_width=True)
-        st.markdown(f"### **Total General:** {total_general}")
     else:
         st.info("No hay datos disponibles para este reporte con los filtros actuales.")
-        
