@@ -97,7 +97,7 @@ if menu == "Compras":
     elif orden_existente is not None:
         default_estado = str(orden_existente.get("ESTADO", "Pendiente"))
     
-    estados_disponibles = ["Pendiente", "Parcial", "Cerrada", "Aprobado", "Rechazado", "Pagado"]
+    estados_disponibles = ["Pendiente","Anulada"]
     idx_estado = estados_disponibles.index(default_estado) if default_estado in estados_disponibles else 0
 
     fecha = st.date_input("FECHA")
