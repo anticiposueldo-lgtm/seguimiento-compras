@@ -36,7 +36,12 @@ def obtener_datos(sheet_name):
     try:
         url = f"{WEB_APP_URL}?action=getData&sheet={sheet_name}"
         response = requests.get(url)
-        return pd.DataFrame(response.json())
+        data = response.json()
+        df = pd.DataFrame(data)
+        # Limpiar espacios en los nombres de las columnas para evitar errores por nombres mal escritos
+        if not df.empty:
+            df.columns = [str(c).strip().upper() for c in df.columns]
+        return df
     except Exception as e:
         st.error(f"Error al conectar con la hoja {sheet_name}: {e}")
         return pd.DataFrame()
@@ -98,10 +103,10 @@ if menu == "Compras":
     estado_desde_facturas = None
     
     if n_orden and not df_facturas_actual.empty:
-        col_oc_fac = next((c for c in df_facturas_actual.columns if "ORDEN" in c.upper()), df_facturas_actual.columns[0])
+        col_oc_fac = next((c for c in df_facturas_actual.columns if "ORDEN" in c), df_facturas_actual.columns[0])
         match_fac = df_facturas_actual[df_facturas_actual[col_oc_fac].astype(str).str.strip() == str(n_orden).strip()]
         if not match_fac.empty:
-            col_est_fac = next((c for c in match_fac.columns if "ESTADO" in c.upper()), match_fac.columns[5] if len(match_fac.columns) > 5 else None)
+            col_est_fac = next((c for c in match_fac.columns if "ESTADO" in c), None)
             if col_est_fac:
                 estado_desde_facturas = str(match_fac.iloc[-1].get(col_est_fac, ""))
 
@@ -183,14 +188,14 @@ elif menu == "Facturas":
             total_facturado_previo = 0.0
             
             if not df_facturas.empty:
-                col_oc_fac = df_facturas.columns[0]
+                col_oc_fac = next((c for c in df_facturas.columns if "ORDEN" in c), df_facturas.columns[0])
                 match_facs = df_facturas[df_facturas[col_oc_fac].astype(str).str.strip() == str(n_orden_buscar).strip()]
                 if not match_facs.empty:
-                    col_est = next((c for c in match_facs.columns if "ESTADO" in c.upper()), match_facs.columns[5] if len(match_facs.columns) > 5 else None)
+                    col_est = next((c for c in match_facs.columns if "ESTADO" in c), None)
                     if col_est:
                         estado_actual_fac = str(match_facs.iloc[-1].get(col_est, "Pendiente"))
                     
-                    col_monto_f = next((c for c in match_facs.columns if "MONTO FACTURA" in c.upper() or "MONTO COMP" in c.upper()), match_facs.columns[8] if len(match_facs.columns) > 8 else None)
+                    col_monto_f = next((c for c in match_facs.columns if "MONTO" in c), None)
                     if col_monto_f:
                         for _, f_row in match_facs.iterrows():
                             try:
@@ -259,7 +264,7 @@ elif menu == "Tesorería":
     df_tesoreria = obtener_datos("TESORERIA")
     
     if not df_facturas.empty:
-        col_oc_facturas = df_facturas.columns[0]
+        col_oc_facturas = next((c for c in df_facturas.columns if "ORDEN" in c), df_facturas.columns[0])
         lista_ordenes = df_facturas[col_oc_facturas].astype(str).unique().tolist()
         n_orden_teso = st.selectbox("Seleccione el N° de Orden de Compra para Tesorería:", [""] + lista_ordenes)
         
@@ -267,12 +272,15 @@ elif menu == "Tesorería":
             facturas_orden = df_facturas[df_facturas[col_oc_facturas].astype(str) == n_orden_teso]
             
             facturas_pendientes = []
+            col_n_fac_f = next((c for c in df_facturas.columns if "FACTURA" in c and "N" in c), df_facturas.columns[6] if len(df_facturas.columns) > 6 else None)
+            col_m_fac_f = next((c for c in df_facturas.columns if "MONTO" in c), df_facturas.columns[8] if len(df_facturas.columns) > 8 else None)
+            
             for _, fac in facturas_orden.iterrows():
-                n_fac = str(fac.iloc[6]) if len(fac) > 6 else ""
+                n_fac = str(fac.get(col_n_fac_f, "")) if col_n_fac_f else ""
                 
                 monto_f_total = 0.0
                 try:
-                    monto_f_total = float(fac.iloc[8]) if len(fac) > 8 and pd.notnull(fac.iloc[8]) else 0.0
+                    monto_f_total = float(fac.get(col_m_fac_f, 0.0) if col_m_fac_f else 0.0)
                 except:
                     monto_f_total = 0.0
                 
@@ -280,11 +288,14 @@ elif menu == "Tesorería":
                 total_pagado_acumulado = 0.0
                 
                 if not df_tesoreria.empty and n_fac:
+                    col_n_fac_t = next((c for c in df_tesoreria.columns if "FACTURA" in c and "N" in c), df_tesoreria.columns[6] if len(df_tesoreria.columns) > 6 else None)
+                    col_m_pago_t = next((c for c in df_tesoreria.columns if "MONTO" in c or "PAGADO" in c), df_tesoreria.columns[8] if len(df_tesoreria.columns) > 8 else None)
+                    
                     for _, p in df_tesoreria.iterrows():
                         try:
-                            p_n_fac = str(p.iloc[6]).strip() if len(p) > 6 else ""
+                            p_n_fac = str(p.get(col_n_fac_t, "")).strip() if col_n_fac_t else ""
                             if p_n_fac == str(n_fac).strip():
-                                total_pagado_acumulado += float(p.iloc[8]) if len(p) > 8 and pd.notnull(p.iloc[8]) else 0.0
+                                total_pagado_acumulado += float(p.get(col_m_pago_t, 0.0) if col_m_pago_t else 0.0)
                         except:
                             pass
                 
@@ -310,11 +321,14 @@ elif menu == "Tesorería":
                     
                     monto_pagado_previo = 0.0
                     if not df_tesoreria.empty:
+                        col_n_fac_t = next((c for c in df_tesoreria.columns if "FACTURA" in c and "N" in c), df_tesoreria.columns[6] if len(df_tesoreria.columns) > 6 else None)
+                        col_m_pago_t = next((c for c in df_tesoreria.columns if "MONTO" in c or "PAGADO" in c), df_tesoreria.columns[8] if len(df_tesoreria.columns) > 8 else None)
+                        
                         for _, p in df_tesoreria.iterrows():
                             try:
-                                p_n_fac = str(p.iloc[6]).strip() if len(p) > 6 else ""
+                                p_n_fac = str(p.get(col_n_fac_t, "")).strip() if col_n_fac_t else ""
                                 if p_n_fac == str(n_factura_seleccionada).strip():
-                                    monto_pagado_previo += float(p.iloc[8]) if len(p) > 8 and pd.notnull(p.iloc[8]) else 0.0
+                                    monto_pagado_previo += float(p.get(col_m_pago_t, 0.0) if col_m_pago_t else 0.0)
                             except:
                                 pass
                     
@@ -322,13 +336,7 @@ elif menu == "Tesorería":
                     if monto_restante < 0:
                         monto_restante = 0.0
                     
-                    proveedor_nombre = ""
-                    for col_key in datos_factura.keys():
-                        if "PROVEEDOR" in str(col_key).upper() and "N" not in str(col_key).upper():
-                            proveedor_nombre = str(datos_factura.get(col_key, ""))
-                            break
-                    if not proveedor_nombre and len(datos_factura) > 3:
-                        proveedor_nombre = str(list(datos_factura.values())[3])
+                    proveedor_nombre = next((str(datos_factura.get(k, "")) for k in datos_factura.keys() if "PROVEEDOR" in k and "N" not in k), "")
                     
                     st.info(f"**Proveedor:** {proveedor_nombre} | **Monto Total Factura:** {formatear_moneda(monto_fac_val)}")
                     if monto_pagado_previo > 0:
@@ -446,7 +454,6 @@ elif menu == "Reportes":
         except:
             return False, None
 
-    # Lógica general para filtrar DataFrames según el submenú seleccionado con seguridad contra nulos
     def cumple_criterio_fecha(val_fecha):
         if "1." in sub_menu_sintesis:
             return True
@@ -460,10 +467,8 @@ elif menu == "Reportes":
             fecha_limite = datetime(anio_sel, mes_num_sel + 1, 1)
 
         if "2." in sub_menu_sintesis:
-            # Acumulado hasta el fin del mes seleccionado
             return dt < fecha_limite
         else:
-            # Estrictamente del mes seleccionado
             return dt.year == anio_sel and dt.month == mes_num_sel
 
     df_rep = pd.DataFrame()
@@ -473,49 +478,60 @@ elif menu == "Reportes":
         if "1." in sub_menu_sintesis:
             monto_comp_pend = 0.0
             if not df_compras.empty:
-                col_oc_c = df_compras.columns[0]
-                col_m_c = df_compras.columns[4]
+                col_oc_c = next((c for c in df_compras.columns if "ORDEN" in c), df_compras.columns[0])
+                col_m_c = next((c for c in df_compras.columns if "MONTO" in c), df_compras.columns[4])
                 facturadas_set = set(df_facturas.iloc[:, 0].astype(str).str.strip()) if not df_facturas.empty else set()
                 df_cp = df_compras[(df_compras["PROVEEDOR"].astype(str) != "ANULADO") & (~df_compras[col_oc_c].astype(str).str.strip().isin(facturadas_set))]
                 monto_comp_pend = pd.to_numeric(df_cp[col_m_c], errors='coerce').fillna(0.0).sum()
                 
             saldo_op_total = 0.0
             if not df_compras.empty and not df_facturas.empty:
+                col_oc_c = next((c for c in df_compras.columns if "ORDEN" in c), df_compras.columns[0])
+                col_m_c = next((c for c in df_compras.columns if "MONTO" in c), df_compras.columns[4])
+                col_m_fac = next((c for c in df_facturas.columns if "MONTO" in c), df_facturas.columns[8])
+                
                 for _, c_row in df_compras.iterrows():
                     if str(c_row.get("PROVEEDOR")) == "ANULADO":
                         continue
-                    n_oc = str(c_row.iloc[0]).strip()
-                    m_oc = float(c_row.iloc[4] or 0.0)
+                    n_oc = str(c_row.get(col_oc_c)).strip()
+                    m_oc = float(c_row.get(col_m_c, 0.0) or 0.0)
                     facs_match = df_facturas[df_facturas.iloc[:, 0].astype(str).str.strip() == n_oc]
-                    t_fac = sum([float(x or 0.0) for x in facs_match.iloc[:, 8]]) if not facs_match.empty else 0.0
+                    t_fac = sum([float(x or 0.0) for x in facs_match[col_m_fac]]) if not facs_match.empty else 0.0
                     s_pend = m_oc - t_fac
                     if t_fac > 0 and s_pend > 0:
                         saldo_op_total += s_pend
                         
             facturas_no_pagadas_monto = 0.0
             if not df_facturas.empty:
-                pagadas_set = set(df_tesoreria.iloc[:, 6].astype(str).str.strip()) if not df_tesoreria.empty else set()
-                df_f_np = df_facturas[~df_facturas.iloc[:, 6].astype(str).str.strip().isin(pagadas_set)]
-                facturas_no_pagadas_monto = pd.to_numeric(df_f_np.iloc[:, 8], errors='coerce').fillna(0.0).sum()
+                col_n_fac_f = next((c for c in df_facturas.columns if "FACTURA" in c and "N" in c), df_facturas.columns[6])
+                col_m_fac = next((c for c in df_facturas.columns if "MONTO" in c), df_facturas.columns[8])
+                pagadas_set = set(df_tesoreria[next((c for c in df_tesoreria.columns if "FACTURA" in c and "N" in c), df_tesoreria.columns[6])].astype(str).str.strip()) if not df_tesoreria.empty else set()
+                df_f_np = df_facturas[~df_facturas[col_n_fac_f].astype(str).str.strip().isin(pagadas_set)]
+                facturas_no_pagadas_monto = pd.to_numeric(df_f_np[col_m_fac], errors='coerce').fillna(0.0).sum()
                 
             parciales_pend_monto = 0.0
             if not df_facturas.empty:
+                col_n_fac_f = next((c for c in df_facturas.columns if "FACTURA" in c and "N" in c), df_facturas.columns[6])
+                col_m_fac = next((c for c in df_facturas.columns if "MONTO" in c), df_facturas.columns[8])
+                col_m_pago_t = next((c for c in df_tesoreria.columns if "MONTO" in c or "PAGADO" in c), df_tesoreria.columns[8]) if not df_tesoreria.empty else None
+                
                 for _, f_row in df_facturas.iterrows():
-                    n_f = str(f_row.iloc[6]).strip()
-                    m_f = float(f_row.iloc[8] or 0.0)
+                    n_f = str(f_row.get(col_n_fac_f)).strip()
+                    m_f = float(f_row.get(col_m_fac, 0.0) or 0.0)
                     t_pag = 0.0
-                    if not df_tesoreria.empty:
+                    if not df_tesoreria.empty and col_m_pago_t:
                         pagos_f = df_tesoreria[df_tesoreria.iloc[:, 6].astype(str).str.strip() == n_f]
-                        t_pag = sum([float(p.iloc[8] or 0.0) for _, p in pagos_f.iterrows()])
+                        t_pag = sum([float(p.get(col_m_pago_t, 0.0) or 0.0) for _, p in pagos_f.iterrows()])
                     if 0 < t_pag < m_f:
                         parciales_pend_monto += (m_f - t_pag)
                         
             cheques_monto = 0.0
             if not df_tesoreria.empty:
-                col_med = df_tesoreria.columns[12] if len(df_tesoreria.columns) > 12 else None
+                col_med = next((c for c in df_tesoreria.columns if "MEDIO" in c), None)
+                col_m_pago = next((c for c in df_tesoreria.columns if "MONTO" in c or "PAGADO" in c), df_tesoreria.columns[8])
                 if col_med:
-                    df_ch = df_tesoreria[df_tesoreria.iloc[:, 12].astype(str).str.strip().str.lower() == "cheque"]
-                    cheques_monto = pd.to_numeric(df_ch.iloc[:, 8], errors='coerce').fillna(0.0).sum()
+                    df_ch = df_tesoreria[df_tesoreria[col_med].astype(str).str.strip().str.lower() == "cheque"]
+                    cheques_monto = pd.to_numeric(df_ch[col_m_pago], errors='coerce').fillna(0.0).sum()
                     
             df_rep = pd.DataFrame([
                 {"Concepto": "Monto de Compras Pendientes (Sin Factura)", "Importe": formatear_moneda(monto_comp_pend)},
@@ -535,12 +551,12 @@ elif menu == "Reportes":
 
             monto_comp_pend_mes = 0.0
             if not df_compras.empty:
-                col_oc_c = df_compras.columns[0]
-                col_f_c = df_compras.columns[1]
-                col_m_c = df_compras.columns[4]
+                col_oc_c = next((c for c in df_compras.columns if "ORDEN" in c), df_compras.columns[0])
+                col_f_c = next((c for c in df_compras.columns if "FECHA" in c), df_compras.columns[1])
+                col_m_c = next((c for c in df_compras.columns if "MONTO" in c), df_compras.columns[4])
                 facturadas_set = set(df_facturas.iloc[:, 0].astype(str).str.strip()) if not df_facturas.empty else set()
                 df_cp = df_compras[(df_compras["PROVEEDOR"].astype(str) != "ANULADO") & (~df_compras[col_oc_c].astype(str).str.strip().isin(facturadas_set))].copy()
-                if not df_cp.empty and col_f_c:
+                if not df_cp.empty:
                     for _, row in df_cp.iterrows():
                         val, dt = es_fecha_valida(row.get(col_f_c))
                         if val and dt is not None and dt < fecha_limite:
@@ -548,15 +564,20 @@ elif menu == "Reportes":
 
             saldo_op_mes = 0.0
             if not df_compras.empty and not df_facturas.empty:
+                col_f_c = next((c for c in df_compras.columns if "FECHA" in c), df_compras.columns[1])
+                col_oc_c = next((c for c in df_compras.columns if "ORDEN" in c), df_compras.columns[0])
+                col_m_c = next((c for c in df_compras.columns if "MONTO" in c), df_compras.columns[4])
+                col_m_fac = next((c for c in df_facturas.columns if "MONTO" in c), df_facturas.columns[8])
+                
                 for _, c_row in df_compras.iterrows():
                     if str(c_row.get("PROVEEDOR")) == "ANULADO":
                         continue
-                    val, dt = es_fecha_valida(c_row.iloc[1])
+                    val, dt = es_fecha_valida(c_row.get(col_f_c))
                     if val and dt is not None and dt < fecha_limite:
-                        n_oc = str(c_row.iloc[0]).strip()
-                        m_oc = float(c_row.iloc[4] or 0.0)
+                        n_oc = str(c_row.get(col_oc_c)).strip()
+                        m_oc = float(c_row.get(col_m_c, 0.0) or 0.0)
                         facs_match = df_facturas[df_facturas.iloc[:, 0].astype(str).str.strip() == n_oc]
-                        t_fac = sum([float(x or 0.0) for x in facs_match.iloc[:, 8]]) if not facs_match.empty else 0.0
+                        t_fac = sum([float(x or 0.0) for x in facs_match[col_m_fac]]) if not facs_match.empty else 0.0
                         s_pend = m_oc - t_fac
                         if t_fac > 0 and s_pend > 0:
                             saldo_op_mes += s_pend
@@ -564,11 +585,14 @@ elif menu == "Reportes":
             facturas_vencidas_monto = 0.0
             facturas_a_vencer_monto = 0.0
             if not df_facturas.empty:
-                pagadas_set = set(df_tesoreria.iloc[:, 6].astype(str).str.strip()) if not df_tesoreria.empty else set()
-                df_f_np = df_facturas[~df_facturas.iloc[:, 6].astype(str).str.strip().isin(pagadas_set)].copy()
-                col_venc = df_facturas.columns[9] if len(df_facturas.columns) > 9 else None
-                col_m_fac = df_facturas.columns[8] if len(df_facturas.columns) > 8 else None
-                if not df_f_np.empty and col_venc and col_m_fac:
+                col_n_fac_f = next((c for c in df_facturas.columns if "FACTURA" in c and "N" in c), df_facturas.columns[6])
+                col_venc = next((c for c in df_facturas.columns if "VENCIMIENTO" in c), df_facturas.columns[9])
+                col_m_fac = next((c for c in df_facturas.columns if "MONTO" in c), df_facturas.columns[8])
+                
+                pagadas_set = set(df_tesoreria[next((c for c in df_tesoreria.columns if "FACTURA" in c and "N" in c), df_tesoreria.columns[6])].astype(str).str.strip()) if not df_tesoreria.empty else set()
+                df_f_np = df_facturas[~df_facturas[col_n_fac_f].astype(str).str.strip().isin(pagadas_set)].copy()
+                
+                if not df_f_np.empty:
                     for _, frow in df_f_np.iterrows():
                         val, dt_v = es_fecha_valida(frow.get(col_venc))
                         if val and dt_v is not None and dt_v < fecha_limite:
@@ -580,15 +604,20 @@ elif menu == "Reportes":
 
             parciales_pend_mes = 0.0
             if not df_facturas.empty:
+                col_venc = next((c for c in df_facturas.columns if "VENCIMIENTO" in c), df_facturas.columns[9])
+                col_n_fac_f = next((c for c in df_facturas.columns if "FACTURA" in c and "N" in c), df_facturas.columns[6])
+                col_m_fac = next((c for c in df_facturas.columns if "MONTO" in c), df_facturas.columns[8])
+                col_m_pago_t = next((c for c in df_tesoreria.columns if "MONTO" in c or "PAGADO" in c), df_tesoreria.columns[8]) if not df_tesoreria.empty else None
+                
                 for _, f_row in df_facturas.iterrows():
-                    val, dt_v = es_fecha_valida(f_row.iloc[9] if len(f_row) > 9 else None)
+                    val, dt_v = es_fecha_valida(f_row.get(col_venc))
                     if val and dt_v is not None and dt_v < fecha_limite:
-                        n_f = str(f_row.iloc[6]).strip()
-                        m_f = float(f_row.iloc[8] or 0.0)
+                        n_f = str(f_row.get(col_n_fac_f)).strip()
+                        m_f = float(f_row.get(col_m_fac, 0.0) or 0.0)
                         t_pag = 0.0
-                        if not df_tesoreria.empty:
+                        if not df_tesoreria.empty and col_m_pago_t:
                             pagos_f = df_tesoreria[df_tesoreria.iloc[:, 6].astype(str).str.strip() == n_f]
-                            t_pag = sum([float(p.iloc[8] or 0.0) for _, p in pagos_f.iterrows()])
+                            t_pag = sum([float(p.get(col_m_pago_t, 0.0) or 0.0) for _, p in pagos_f.iterrows()])
                         if 0 < t_pag < m_f:
                             parciales_pend_mes += (m_f - t_pag)
 
@@ -605,21 +634,25 @@ elif menu == "Reportes":
             facturas_vencidas_mes = 0.0
             cheques_debito_mes = 0.0
             if not df_facturas.empty:
-                pagadas_set = set(df_tesoreria.iloc[:, 6].astype(str).str.strip()) if not df_tesoreria.empty else set()
-                df_f_np = df_facturas[~df_facturas.iloc[:, 6].astype(str).str.strip().isin(pagadas_set)].copy()
-                col_venc = df_facturas.columns[9] if len(df_facturas.columns) > 9 else None
-                col_m_fac = df_facturas.columns[8] if len(df_facturas.columns) > 8 else None
-                if not df_f_np.empty and col_venc and col_m_fac:
+                col_n_fac_f = next((c for c in df_facturas.columns if "FACTURA" in c and "N" in c), df_facturas.columns[6])
+                col_venc = next((c for c in df_facturas.columns if "VENCIMIENTO" in c), df_facturas.columns[9])
+                col_m_fac = next((c for c in df_facturas.columns if "MONTO" in c), df_facturas.columns[8])
+                
+                pagadas_set = set(df_tesoreria[next((c for c in df_tesoreria.columns if "FACTURA" in c and "N" in c), df_tesoreria.columns[6])].astype(str).str.strip()) if not df_tesoreria.empty else set()
+                df_f_np = df_facturas[~df_facturas[col_n_fac_f].astype(str).str.strip().isin(pagadas_set)].copy()
+                
+                if not df_f_np.empty:
                     for _, frow in df_f_np.iterrows():
                         val, dt_v = es_fecha_valida(frow.get(col_venc))
                         if val and dt_v is not None and dt_v.year == anio_sel and dt_v.month == mes_num_sel:
                             facturas_vencidas_mes += float(frow.get(col_m_fac, 0.0) or 0.0)
 
             if not df_tesoreria.empty:
-                col_medio = df_tesoreria.columns[12] if len(df_tesoreria.columns) > 12 else None
-                col_f_deb = df_tesoreria.columns[14] if len(df_tesoreria.columns) > 14 else None
-                col_m_pago = df_tesoreria.columns[8] if len(df_tesoreria.columns) > 8 else None
-                if col_medio and col_f_deb and col_m_pago:
+                col_medio = next((c for c in df_tesoreria.columns if "MEDIO" in c), None)
+                col_f_deb = next((c for c in df_tesoreria.columns if "DÉBITO" in c or "DEBITO" in c or "CHEQUE" in c), df_tesoreria.columns[14])
+                col_m_pago = next((c for c in df_tesoreria.columns if "MONTO" in c or "PAGADO" in c), df_tesoreria.columns[8])
+                
+                if col_medio and col_f_deb:
                     df_ch = df_tesoreria[df_tesoreria[col_medio].astype(str).str.strip().str.lower() == "cheque"].copy()
                     for _, crow in df_ch.iterrows():
                         val, dt_d = es_fecha_valida(crow.get(col_f_deb))
@@ -634,9 +667,9 @@ elif menu == "Reportes":
 
     elif tipo_reporte == "Facturas Ordenadas por Proveedor":
         if not df_facturas.empty:
-            col_prov = next((c for c in df_facturas.columns if "PROVEEDOR" in c.upper() and "N" not in c.upper()), df_facturas.columns[3] if len(df_facturas.columns) > 3 else None)
-            col_monto = next((c for c in df_facturas.columns if "MONTO FACTURA" in c.upper() or "MONTO COMP" in c.upper()), df_facturas.columns[8] if len(df_facturas.columns) > 8 else None)
-            col_venc = next((c for c in df_facturas.columns if "VENCIMIENTO" in c.upper()), df_facturas.columns[9] if len(df_facturas.columns) > 9 else None)
+            col_prov = next((c for c in df_facturas.columns if "PROVEEDOR" in c and "N" not in c), df_facturas.columns[3])
+            col_monto = next((c for c in df_facturas.columns if "MONTO" in c), df_facturas.columns[8])
+            col_venc = next((c for c in df_facturas.columns if "VENCIMIENTO" in c), df_facturas.columns[9])
             
             if col_prov and col_monto:
                 df_temp = df_facturas.copy()
@@ -649,15 +682,17 @@ elif menu == "Reportes":
                 if col_venc:
                     df_rep[col_venc] = pd.to_datetime(df_rep[col_venc], errors='coerce').dt.strftime('%d/%m/%Y').fillna(df_rep[col_venc])
 
-                df_rep = df_rep[[col_prov, 'N FACTURA', col_monto, col_venc]]
+                col_n_fac = next((c for c in df_rep.columns if "FACTURA" in c and "N" in c), df_rep.columns[6])
+                df_rep = df_rep[[col_prov, col_n_fac, col_monto, col_venc]]
+                df_rep.columns = ["Proveedor", "N° Factura", col_monto, "Fecha Vencimiento"]
                 total_general_num = df_rep[col_monto].sum()
                 df_rep[col_monto] = df_rep[col_monto].apply(formatear_moneda)
 
     elif tipo_reporte == "Facturas Ordenadas por Fecha de Vencimiento":
         if not df_facturas.empty:
-            col_prov = next((c for c in df_facturas.columns if "PROVEEDOR" in c.upper() and "N" not in c.upper()), df_facturas.columns[3] if len(df_facturas.columns) > 3 else None)
-            col_monto = next((c for c in df_facturas.columns if "MONTO FACTURA" in c.upper() or "MONTO COMP" in c.upper()), df_facturas.columns[8] if len(df_facturas.columns) > 8 else None)
-            col_venc = next((c for c in df_facturas.columns if "VENCIMIENTO" in c.upper()), df_facturas.columns[9] if len(df_facturas.columns) > 9 else None)
+            col_prov = next((c for c in df_facturas.columns if "PROVEEDOR" in c and "N" not in c), df_facturas.columns[3])
+            col_monto = next((c for c in df_facturas.columns if "MONTO" in c), df_facturas.columns[8])
+            col_venc = next((c for c in df_facturas.columns if "VENCIMIENTO" in c), df_facturas.columns[9])
             
             if col_venc and col_monto:
                 df_temp = df_facturas.copy()
@@ -671,17 +706,19 @@ elif menu == "Reportes":
                 df_rep.drop(columns=["_temp_sort"], inplace=True, errors='ignore')
                 
                 df_rep[col_venc] = df_temp_fecha.dt.strftime('%d/%m/%Y').fillna(df_rep[col_venc])
-                df_rep = df_rep[[col_venc, col_prov, 'N FACTURA', col_monto]]
+                col_n_fac = next((c for c in df_rep.columns if "FACTURA" in c and "N" in c), df_rep.columns[6])
+                df_rep = df_rep[[col_venc, col_prov, col_n_fac, col_monto]]
+                df_rep.columns = ["Fecha Vencimiento", "Proveedor", "N° Factura", col_monto]
                 total_general_num = df_rep[col_monto].sum()
                 df_rep[col_monto] = df_rep[col_monto].apply(formatear_moneda)
 
     elif tipo_reporte == "Pagos con Cheque por Fecha Débito":
         if not df_tesoreria.empty:
-            col_medio = next((c for c in df_tesoreria.columns if "MEDIO" in c.upper()), df_tesoreria.columns[12] if len(df_tesoreria.columns) > 12 else None)
-            col_banco = next((c for c in df_tesoreria.columns if "BANCO" in c.upper()), df_tesoreria.columns[13] if len(df_tesoreria.columns) > 13 else None)
-            col_f_deb = next((c for c in df_tesoreria.columns if "DÉBITO" in c.upper() or "DEBITO" in c.upper() or "CHEQUE" in c.upper()), df_tesoreria.columns[14] if len(df_tesoreria.columns) > 14 else None)
-            col_m_pago = df_tesoreria.columns[8] if len(df_tesoreria.columns) > 8 else None
-            col_prov = next((c for c in df_tesoreria.columns if "PROVEEDOR" in c.upper() and "N" not in c.upper()), df_tesoreria.columns[3] if len(df_tesoreria.columns) > 3 else None)
+            col_medio = next((c for c in df_tesoreria.columns if "MEDIO" in c), None)
+            col_f_deb = next((c for c in df_tesoreria.columns if "DÉBITO" in c or "DEBITO" in c or "CHEQUE" in c), df_tesoreria.columns[14])
+            col_m_pago = next((c for c in df_tesoreria.columns if "MONTO" in c or "PAGADO" in c), df_tesoreria.columns[8])
+            col_prov = next((c for c in df_tesoreria.columns if "PROVEEDOR" in c and "N" not in c), df_tesoreria.columns[3])
+            col_banco = next((c for c in df_tesoreria.columns if "BANCO" in c), None)
             
             if col_medio:
                 df_cheques = df_tesoreria[df_tesoreria[col_medio].astype(str).str.strip().str.lower() == "cheque"].copy()
@@ -696,20 +733,22 @@ elif menu == "Reportes":
                     df_cheques.drop(columns=["_temp_sort"], inplace=True, errors='ignore')
                     
                     df_cheques[col_f_deb] = df_temp_fdeb.dt.strftime('%d/%m/%Y').fillna(df_cheques[col_f_deb])
-                    columnas_mostrar = [c for c in [col_f_deb, col_prov, col_m_pago, col_banco, 'N FACTURA'] if c in df_cheques.columns]
+                    col_n_fac = next((c for c in df_cheques.columns if "FACTURA" in c and "N" in c), df_cheques.columns[6])
+                    
+                    columnas_mostrar = [c for c in [col_f_deb, col_prov, col_m_pago, col_banco, col_n_fac] if c in df_cheques.columns]
                     df_rep = df_cheques[columnas_mostrar].copy()
                     total_general_num = df_cheques[col_m_pago].sum() if col_m_pago else 0.0
                     df_rep[col_m_pago] = df_rep[col_m_pago].apply(formatear_moneda)
 
     elif tipo_reporte == "Órdenes de Compra Pendientes de Factura":
         if not df_compras.empty:
-            col_oc_compra = next((c for c in df_compras.columns if "ORDEN" in c.upper()), df_compras.columns[0])
-            col_monto_oc = next((c for c in df_compras.columns if c.upper() == "MONTO"), df_compras.columns[4] if len(df_compras.columns) > 4 else None)
-            col_fecha_c = next((c for c in df_compras.columns if "FECHA" in c.upper()), df_compras.columns[1] if len(df_compras.columns) > 1 else None)
+            col_oc_compra = next((c for c in df_compras.columns if "ORDEN" in c), df_compras.columns[0])
+            col_monto_oc = next((c for c in df_compras.columns if "MONTO" in c), df_compras.columns[4])
+            col_fecha_c = next((c for c in df_compras.columns if "FECHA" in c), df_compras.columns[1])
             
             facturadas = set()
             if not df_facturas.empty:
-                col_oc_fac = next((c for c in df_facturas.columns if "ORDEN" in c.upper()), df_facturas.columns[0])
+                col_oc_fac = next((c for c in df_facturas.columns if "ORDEN" in c), df_facturas.columns[0])
                 facturadas = set(df_facturas[col_oc_fac].astype(str).str.strip())
             
             df_validas = df_compras[df_compras["PROVEEDOR"].astype(str) != "ANULADO"].copy()
@@ -727,13 +766,13 @@ elif menu == "Reportes":
 
     elif tipo_reporte == "Consolidado: Compras Pendientes por Mes":
         if not df_compras.empty:
-            col_oc_compra = next((c for c in df_compras.columns if "ORDEN" in c.upper()), df_compras.columns[0])
-            col_fecha = next((c for c in df_compras.columns if "FECHA" in c.upper()), df_compras.columns[1] if len(df_compras.columns) > 1 else None)
-            col_monto_oc = next((c for c in df_compras.columns if c.upper() == "MONTO"), df_compras.columns[4] if len(df_compras.columns) > 4 else None)
+            col_oc_compra = next((c for c in df_compras.columns if "ORDEN" in c), df_compras.columns[0])
+            col_fecha = next((c for c in df_compras.columns if "FECHA" in c), df_compras.columns[1])
+            col_monto_oc = next((c for c in df_compras.columns if "MONTO" in c), df_compras.columns[4])
             
             facturadas = set()
             if not df_facturas.empty:
-                col_oc_fac = next((c for c in df_facturas.columns if "ORDEN" in c.upper()), df_facturas.columns[0])
+                col_oc_fac = next((c for c in df_facturas.columns if "ORDEN" in c), df_facturas.columns[0])
                 facturadas = set(df_facturas[col_oc_fac].astype(str).str.strip())
             
             df_validas = df_compras[df_compras["PROVEEDOR"].astype(str) != "ANULADO"].copy()
@@ -752,10 +791,11 @@ elif menu == "Reportes":
 
     elif tipo_reporte == "Consolidado: Saldo de Órdenes Parciales":
         if not df_compras.empty and not df_facturas.empty:
-            col_oc_compra = df_compras.columns[0]
-            col_monto_oc = df_compras.columns[4]
-            col_oc_fac = df_facturas.columns[0]
-            col_fecha_c = df_compras.columns[1]
+            col_oc_compra = next((c for c in df_compras.columns if "ORDEN" in c), df_compras.columns[0])
+            col_monto_oc = next((c for c in df_compras.columns if "MONTO" in c), df_compras.columns[4])
+            col_oc_fac = next((c for c in df_facturas.columns if "ORDEN" in c), df_facturas.columns[0])
+            col_fecha_c = next((c for c in df_compras.columns if "FECHA" in c), df_compras.columns[1])
+            col_m_fac = next((c for c in df_facturas.columns if "MONTO" in c), df_facturas.columns[8])
             
             datos_parciales = []
             for _, compra in df_compras.iterrows():
@@ -771,7 +811,7 @@ elif menu == "Reportes":
                 total_facturado = 0.0
                 for _, f_row in facs_asociadas.iterrows():
                     try:
-                        total_facturado += float(f_row.iloc[8] or 0.0)
+                        total_facturado += float(f_row.get(col_m_fac, 0.0) or 0.0)
                     except:
                         pass
                 
@@ -797,14 +837,16 @@ elif menu == "Reportes":
 
     elif tipo_reporte == "Consolidado: Facturas No Pagadas (Sin Tesorería)":
         if not df_facturas.empty:
-            col_m_fac = df_facturas.columns[8]
-            col_venc = next((c for c in df_facturas.columns if "VENCIMIENTO" in c.upper()), df_facturas.columns[9] if len(df_facturas.columns) > 9 else None)
+            col_m_fac = next((c for c in df_facturas.columns if "MONTO" in c), df_facturas.columns[8])
+            col_venc = next((c for c in df_facturas.columns if "VENCIMIENTO" in c), df_facturas.columns[9])
+            col_n_fac_f = next((c for c in df_facturas.columns if "FACTURA" in c and "N" in c), df_facturas.columns[6])
             
             facturas_pagadas = set()
             if not df_tesoreria.empty:
-                facturas_pagadas = set(df_tesoreria.iloc[:, 6].astype(str).str.strip())
+                col_n_fac_t = next((c for c in df_tesoreria.columns if "FACTURA" in c and "N" in c), df_tesoreria.columns[6])
+                facturas_pagadas = set(df_tesoreria[col_n_fac_t].astype(str).str.strip())
             
-            df_temp = df_facturas[~df_facturas.iloc[:, 6].astype(str).str.strip().isin(facturas_pagadas)].copy()
+            df_temp = df_facturas[~df_facturas[col_n_fac_f].astype(str).str.strip().isin(facturas_pagadas)].copy()
             if not df_temp.empty and col_venc:
                 if "1." not in sub_menu_sintesis:
                     df_temp = df_temp[df_temp[col_venc].apply(cumple_criterio_fecha)]
@@ -817,9 +859,9 @@ elif menu == "Reportes":
 
     elif tipo_reporte == "Consolidado: Pagos con Cheques a la Fecha":
         if not df_tesoreria.empty:
-            col_medio = next((c for c in df_tesoreria.columns if "MEDIO" in c.upper()), df_tesoreria.columns[12] if len(df_tesoreria.columns) > 12 else None)
-            col_f_deb = next((c for c in df_tesoreria.columns if "DÉBITO" in c.upper() or "DEBITO" in c.upper() or "CHEQUE" in c.upper()), df_tesoreria.columns[14] if len(df_tesoreria.columns) > 14 else None)
-            col_monto_pago = df_tesoreria.columns[8] if len(df_tesoreria.columns) > 8 else None
+            col_medio = next((c for c in df_tesoreria.columns if "MEDIO" in c), None)
+            col_f_deb = next((c for c in df_tesoreria.columns if "DÉBITO" in c or "DEBITO" in c or "CHEQUE" in c), df_tesoreria.columns[14])
+            col_monto_pago = next((c for c in df_tesoreria.columns if "MONTO" in c or "PAGADO" in c), df_tesoreria.columns[8])
             
             if col_medio and col_f_deb:
                 df_cheques = df_tesoreria[df_tesoreria[col_medio].astype(str).str.strip().str.lower() == "cheque"].copy()
@@ -836,21 +878,26 @@ elif menu == "Reportes":
 
     elif tipo_reporte == "Consolidado: Facturas con Pago Parcial Pendiente":
         if not df_facturas.empty:
-            col_venc = next((c for c in df_facturas.columns if "VENCIMIENTO" in c.upper()), df_facturas.columns[9] if len(df_facturas.columns) > 9 else None)
+            col_venc = next((c for c in df_facturas.columns if "VENCIMIENTO" in c), df_facturas.columns[9])
+            col_n_fac_f = next((c for c in df_facturas.columns if "FACTURA" in c and "N" in c), df_facturas.columns[6])
+            col_m_fac = next((c for c in df_facturas.columns if "MONTO" in c), df_facturas.columns[8])
+            col_n_fac_t = next((c for c in df_tesoreria.columns if "FACTURA" in c and "N" in c), df_tesoreria.columns[6]) if not df_tesoreria.empty else None
+            col_m_pago_t = next((c for c in df_tesoreria.columns if "MONTO" in c or "PAGADO" in c), df_tesoreria.columns[8]) if not df_tesoreria.empty else None
+            
             datos_parciales_teso = []
             for _, fac in df_facturas.iterrows():
                 if "1." not in sub_menu_sintesis and col_venc and not cumple_criterio_fecha(fac.get(col_venc)):
                     continue
                 
-                n_fac = str(fac.iloc[6]).strip()
-                monto_fac = float(fac.iloc[8] or 0.0)
+                n_fac = str(fac.get(col_n_fac_f)).strip()
+                monto_fac = float(fac.get(col_m_fac, 0.0) or 0.0)
                 
                 total_pagado = 0.0
-                if not df_tesoreria.empty:
-                    pagos = df_tesoreria[df_tesoreria.iloc[:, 6].astype(str).str.strip() == n_fac]
+                if not df_tesoreria.empty and col_n_fac_t and col_m_pago_t:
+                    pagos = df_tesoreria[df_tesoreria[col_n_fac_t].astype(str).str.strip() == n_fac]
                     for _, p in pagos.iterrows():
                         try:
-                            total_pagado += float(p.iloc[8] or 0.0)
+                            total_pagado += float(p.get(col_m_pago_t, 0.0) or 0.0)
                         except:
                             pass
                 
