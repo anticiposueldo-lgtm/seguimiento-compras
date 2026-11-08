@@ -355,54 +355,83 @@ elif menu == "Tesorería":
 elif menu == "Reportes":
     st.header("📈 Módulo de Reportes Financieros")
     
-    # Selector directo de las solapas de reportes creadas en el Google Sheet
     tipo_reporte = st.selectbox("Seleccione el Reporte a Consultar:", [
         "REPORTE OC",
         "REPORTE FACTURAS",
-        "REPORTE COMPROBANTES POR VENCIMIENTO"
+        "REPORTE COMPROBANTES POR VENCIMIENTO",
+        "TESORERÍA - PAGOS (Cheque, Banco y Fecha)"
     ])
     
     st.markdown("---")
     
-    # Encabezado formal institucional
     st.markdown("### Municipalidad de Sunchales - Seguimiento Financiero")
     st.markdown(f"#### Reporte: {tipo_reporte}")
     
-    # Leemos la solapa correspondiente de manera limpia desde Apps Script
-    df_rep = obtener_datos(tipo_reporte)
+    if tipo_reporte == "TESORERÍA - PAGOS (Cheque, Banco y Fecha)":
+        df_raw = obtener_datos("TESORERIA")
+        if not df_raw.empty:
+            cols_deseadas = []
+            for c in df_raw.columns:
+                c_up = str(c).upper()
+                if any(x in c_up for x in ["PROVEEDOR", "MONTO", "MEDIO", "BANCO", "DÉBITO", "DEBITO", "CHEQUE", "PAGO"]):
+                    cols_deseadas.append(c)
+            df_rep = df_raw[cols_deseadas].copy() if cols_deseadas else df_raw.copy()
+        else:
+            df_rep = pd.DataFrame()
+    else:
+        df_rep = obtener_datos(tipo_reporte)
     
-    # Mostrar tabla y opciones si hay datos
+    if not df_rep.empty:
+        df_rep = df_rep.dropna(how='all')
+        df_rep = df_rep[df_rep.astype(str).ne('').any(axis=1)]
+        
+        # Formateo contable automático para columnas que contengan montos o números
+        for col in df_rep.columns:
+            col_up = str(col).upper()
+            if any(k in col_up for k in ["MONTO", "PAGADO", "TOTAL", "IMPORTE", "SALDO"]):
+                df_rep[col] = pd.to_numeric(df_rep[col], errors='coerce').fillna(0.0).apply(lambda x: f"${x:,.2f}")
+
     if not df_rep.empty:
         st.dataframe(df_rep, use_container_width=True)
         
         csv = df_rep.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Descargar Reporte en Excel (CSV)", csv, f"{tipo_reporte.lower().replace(' ', '_')}.csv", "text/csv")
+        st.download_button("📥 Descargar Reporte en Excel (CSV)", csv, f"{tipo_reporte.lower().replace(' ', '_').replace('(', '').replace(')', '')}.csv", "text/csv")
         
+        # HTML preparado con orientación horizontal (landscape) y alineación contable a la derecha
         html_content = f"""
         <html>
         <head>
             <title>Municipalidad de Sunchales - Reporte</title>
             <style>
-                body {{ font-family: Arial, sans-serif; padding: 20px; }}
-                h2, h3 {{ text-align: center; color: #333; }}
-                table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-                th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }}
-                th {{ background-color: #f2f2f2; }}
+                @page {{
+                    size: landscape;
+                    margin: 10mm;
+                }}
+                body {{ font-family: Arial, sans-serif; padding: 10px; }}
+                h2, h4 {{ text-align: center; color: #333; margin: 5px 0; }}
+                table {{ width: 100%; border-collapse: collapse; margin-top: 15px; }}
+                th, td {{ border: 1px solid #bbb; padding: 6px 8px; text-align: left; font-size: 11px; }}
+                th {{ background-color: #f2f2f2; text-align: center; }}
+                /* Alinea a la derecha las columnas numéricas/contables */
+                td:nth-child(n+3), th:nth-child(n+3) {{ text-align: right; }}
             </style>
         </head>
         <body>
             <h2>Municipalidad de Sunchales</h2>
-            <h3>Seguimiento Financiero</h3>
-            <h4>{tipo_reporte}</h4>
-            {df_rep.to_html(index=False, classes='table')}
-            <script>window.print();</script>
+            <h4>Seguimiento Financiero - {tipo_reporte}</h4>
+            {df_rep.to_html(index=False, classes='table', escape=False)}
+            <script>
+                window.onload = function() {{
+                    window.print();
+                }};
+            </script>
         </body>
         </html>
         """
         
         st.markdown("---")
-        if st.button("🖨️ Imprimir / Guardar como PDF"):
+        if st.button("🖨️ Imprimir / Guardar como PDF (Horizontal)"):
             st.components.v1.html(html_content, height=600)
     else:
-        st.info(f"No hay datos disponibles en la solapa '{tipo_reporte}' o la hoja se encuentra vacía.")
+        st.info(f"No hay datos disponibles en el reporte '{tipo_reporte}' o la hoja se encuentra vacía.")
         
