@@ -433,7 +433,7 @@ elif menu == "Reportes":
         
     st.markdown("---")
 
-def es_fecha_valida(val_fecha):
+    def es_fecha_valida(val_fecha):
         if val_fecha is None:
             return False, None
         val_str = str(val_fecha).strip()
@@ -455,7 +455,6 @@ def es_fecha_valida(val_fecha):
         val, dt = es_fecha_valida(val_fecha)
         if not val or dt is None:
             return False 
-        
         try:
             if mes_num_sel == 12:
                 fecha_limite = datetime(anio_sel + 1, 1, 1)
@@ -694,62 +693,6 @@ def es_fecha_valida(val_fecha):
             if not df_cheques.empty:
                 if "1." not in sub_menu_sintesis and c_f_deb:
                     df_cheques = df_cheques[df_cheques[c_f_deb].apply(cumple_criterio_fecha)]
-                if not df_cheques.empty:
-                    df_cheques[c_m_pago_t] = pd.to_numeric(df_cheques[c_m_pago_t], errors='coerce').fillna(0.0)
-                    df_temp_fdeb = pd.to_datetime(df_cheques[c_f_deb], errors='coerce', dayfirst=True)
-                    df_cheques[c_f_deb] = df_temp_fdeb.dt.strftime('%d/%m/%Y').fillna(df_cheques[c_f_deb])
-                    df_rep = df_cheques.copy()
-                    total_general_num = df_cheques[c_m_pago_t].sum()
-                    df_rep[c_m_pago_t] = df_rep[c_m_pago_t].apply(formatear_moneda)
-
-    elif tipo_reporte == "Consolidado: Facturas con Pago Parcial Pendiente":
-        if not df_facturas.empty:
-            datos_parciales_teso = []
-            for _, fac in df_facturas.iterrows():
-                if "1." not in sub_menu_sintesis and not cumple_criterio_fecha(fac.get(c_venc)):
-                    continue
-                n_fac = str(fac.get(c_n_fac)).strip()
-                monto_fac = float(fac.get(c_m_fac, 0.0) or 0.0)
-                total_pagado = 0.0
-                if not df_tesoreria.empty:
-                    pagos = df_tesoreria[df_tesoreria[c_n_fac_t].astype(str).str.strip() == n_fac]
-                    total_pagado = sum([float(p.get(c_m_pago_t, 0.0) or 0.0) for _, p in pagos.iterrows()])
-                saldo_restante = monto_fac - total_pagado
-                if 0 < total_pagado < monto_fac:
-                    datos_parciales_teso.append({
-                        "N° Factura": n_fac,
-                        "Proveedor": fac.get(c_prov_fac),
-                        "Monto Factura": monto_fac,
-                        "Total Pagado": total_pagado,
-                        "Saldo Pendiente Pago": saldo_restante
-                    })
-            if datos_parciales_teso:
-                df_rep = pd.DataFrame(datos_parciales_teso)
-                total_general_num = df_rep["Saldo Pendiente Pago"].sum()
-                df_rep["Monto Factura"] = df_rep["Monto Factura"].apply(formatear_moneda)
-                df_rep["Total Pagado"] = df_rep["Total Pagado"].apply(formatear_moneda)
-                df_rep["Saldo Pendiente Pago"] = df_rep["Saldo Pendiente Pago"].apply(formatear_moneda)
-
-    elif tipo_reporte == "Consolidado: Facturas No Pagadas (Sin Tesorería)":
-        if not df_facturas.empty:
-            facturas_pagadas = set(df_tesoreria[c_n_fac_t].astype(str).str.strip()) if not df_tesoreria.empty else set()
-            df_temp = df_facturas[~df_facturas[c_n_fac].astype(str).str.strip().isin(facturas_pagadas)].copy()
-            if not df_temp.empty:
-                if "1." not in sub_menu_sintesis:
-                    df_temp = df_temp[df_temp[c_venc].apply(lambda x: cumple_criterio_fecha(x))]
-                if not df_temp.empty:
-                    df_temp[c_m_fac] = pd.to_numeric(df_temp[c_m_fac], errors='coerce').fillna(0.0)
-                    df_temp[c_venc] = pd.to_datetime(df_temp[c_venc], errors='coerce', dayfirst=True).dt.strftime('%d/%m/%Y').fillna(df_temp[c_venc])
-                    df_rep = df_temp.copy()
-                    total_general_num = df_rep[c_m_fac].sum()
-                    df_rep[c_m_fac] = df_rep[c_m_fac].apply(formatear_moneda)
-
-    elif tipo_reporte == "Consolidado: Pagos con Cheques a la Fecha":
-        if not df_tesoreria.empty and c_medio:
-            df_cheques = df_tesoreria[df_tesoreria[c_medio].astype(str).str.strip().str.lower() == "cheque"].copy()
-            if not df_cheques.empty:
-                if "1." not in sub_menu_sintesis:
-                    df_cheques = df_cheques[df_cheques[c_f_deb].apply(lambda x: cumple_criterio_fecha(x))]
                 if not df_cheques.empty:
                     df_cheques[c_m_pago_t] = pd.to_numeric(df_cheques[c_m_pago_t], errors='coerce').fillna(0.0)
                     df_temp_fdeb = pd.to_datetime(df_cheques[c_f_deb], errors='coerce', dayfirst=True)
