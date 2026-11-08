@@ -456,9 +456,6 @@ elif menu == "Reportes":
         total_general_num = monto_comp_pend + saldo_op_total + facturas_no_pagadas_monto + parciales_pend_monto + cheques_monto
         total_general = formatear_moneda(total_general_num)
 
-        # ----------------------------------------------------
-        # SUB-REPORTE / SÍNTESIS MENSUAL DETALLADA
-        # ----------------------------------------------------
         st.markdown("---")
         st.markdown("### 📅 Filtrar Síntesis Financiera por Mes y Año")
         col_anio, col_mes = st.columns(2)
@@ -473,10 +470,8 @@ elif menu == "Reportes":
         mes_nombre_sel = col_mes.selectbox("Seleccione el Mes:", list(meses_dict.keys()))
         mes_num_sel = meses_dict[mes_nombre_sel]
         
-        # Procesamiento filtrado por mes/año seleccionado
         hoy = datetime.now()
         
-        # 1. Órdenes de compra sin factura (por mes de la OC)
         monto_comp_pend_mes = 0.0
         if not df_compras.empty:
             col_oc_c = df_compras.columns[0]
@@ -489,7 +484,6 @@ elif menu == "Reportes":
                 df_cp_mes = df_cp[(df_cp["_dt"].dt.year == anio_sel) & (df_cp["_dt"].dt.month == mes_num_sel)]
                 monto_comp_pend_mes = pd.to_numeric(df_cp_mes[col_m_c], errors='coerce').fillna(0.0).sum()
 
-        # 2. Saldo de órdenes parciales (por mes de la OC)
         saldo_op_mes = 0.0
         if not df_compras.empty and not df_facturas.empty:
             for _, c_row in df_compras.iterrows():
@@ -505,7 +499,6 @@ elif menu == "Reportes":
                     if t_fac > 0 and s_pend > 0:
                         saldo_op_mes += s_pend
 
-        # 3 y 4. Facturas no pagadas divididas en Vencidas y A Vencer (por mes de Vencimiento)
         facturas_vencidas_monto = 0.0
         facturas_a_vencer_monto = 0.0
         if not df_facturas.empty:
@@ -527,10 +520,8 @@ elif menu == "Reportes":
                         else:
                             facturas_a_vencer_monto += monto_f
 
-        # 5. Saldo parcial de facturas con pago parcial (por mes de comprobante o vencimiento)
         parciales_pend_mes = 0.0
         if not df_facturas.empty:
-            col_venc = df_facturas.columns[9] if len(df_facturas.columns) > 9 else None
             for _, f_row in df_facturas.iterrows():
                 dt_v = pd.to_datetime(f_row.iloc[9], errors='coerce') if len(f_row) > 9 else None
                 if pd.notnull(dt_v) and dt_v.year == anio_sel and dt_v.month == mes_num_sel:
@@ -611,7 +602,7 @@ elif menu == "Reportes":
             col_medio = next((c for c in df_tesoreria.columns if "MEDIO" in c.upper()), df_tesoreria.columns[12] if len(df_tesoreria.columns) > 12 else None)
             col_banco = next((c for c in df_tesoreria.columns if "BANCO" in c.upper()), df_tesoreria.columns[13] if len(df_tesoreria.columns) > 13 else None)
             col_f_deb = next((c for c in df_tesoreria.columns if "DÉBITO" in c.upper() or "DEBITO" in c.upper() or "CHEQUE" in c.upper()), df_tesoreria.columns[14] if len(df_tesoreria.columns) > 14 else None)
-            col_m_pago = df_tesoreria.columns[8] if len(df_tesoreria.columns) > 8 else None # Columna I (monto pagado)
+            col_m_pago = df_tesoreria.columns[8] if len(df_tesoreria.columns) > 8 else None
             col_prov = next((c for c in df_tesoreria.columns if "PROVEEDOR" in c.upper() and "N" not in c.upper()), df_tesoreria.columns[3] if len(df_tesoreria.columns) > 3 else None)
             
             if col_medio:
@@ -804,7 +795,7 @@ elif menu == "Reportes":
                 df_rep["Total Pagado"] = df_rep["Total Pagado"].apply(formatear_moneda)
                 df_rep["Saldo Pendiente Pago"] = df_rep["Saldo Pendiente Pago"].apply(formatear_moneda)
 
-    # Mostrar tabla y totales si hay datos
+    # Mostrar tabla, totales y opciones de impresión / descarga con alineación contable a la derecha
     if tipo_reporte != "SÍNTESIS FINANCIERA GENERAL" and not df_rep.empty:
         st.dataframe(df_rep, use_container_width=True)
         st.markdown(f"### **Total General:** {total_general}")
@@ -812,6 +803,7 @@ elif menu == "Reportes":
         csv = df_rep.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Descargar Reporte en Excel (CSV)", csv, "reporte_financiero.csv", "text/csv")
         
+        # HTML con CSS para alinear números a la derecha en formato contable para la impresión / PDF
         html_content = f"""
         <html>
         <head>
@@ -822,6 +814,8 @@ elif menu == "Reportes":
                 table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
                 th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }}
                 th {{ background-color: #f2f2f2; }}
+                /* Alineación a la derecha para columnas que contengan montos o números con $ */
+                td:nth-child(n+3), th:nth-child(n+3) {{ text-align: right; }}
                 .total {{ margin-top: 20px; font-size: 16px; font-weight: bold; text-align: right; }}
             </style>
         </head>
