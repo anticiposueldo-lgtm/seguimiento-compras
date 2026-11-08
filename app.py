@@ -382,10 +382,22 @@ elif menu == "Reportes":
         df_rep = obtener_datos(tipo_reporte)
     
     if not df_rep.empty:
-        df_rep = df_rep.dropna(how='all')
-        df_rep = df_rep[df_rep.astype(str).ne('').any(axis=1)]
+        # 1. Descartar filas donde la primera columna esté vacía, sea 0, nan o None
+        primera_col = df_rep.columns[0]
+        df_rep = df_rep[
+            df_rep[primera_col].notna() & 
+            (df_rep[primera_col].astype(str).str.strip() != "") & 
+            (df_rep[primera_col].astype(str).str.strip() != "0") & 
+            (df_rep[primera_col].astype(str).str.lower() != "nan")
+        ].copy()
         
-        # Formateo contable automático para columnas que contengan montos o números
+        # 2. Formatear fechas a solo Día/Mes/Año para evitar horas y minutos
+        for col in df_rep.columns:
+            col_up = str(col).upper()
+            if any(k in col_up for k in ["FECHA", "VENCIMIENTO", "DÉBITO", "DEBITO"]):
+                df_rep[col] = pd.to_datetime(df_rep[col], errors='coerce', dayfirst=True).dt.strftime('%d/%m/%Y').fillna(df_rep[col])
+        
+        # 3. Formateo contable para columnas numéricas/montos
         for col in df_rep.columns:
             col_up = str(col).upper()
             if any(k in col_up for k in ["MONTO", "PAGADO", "TOTAL", "IMPORTE", "SALDO"]):
@@ -397,7 +409,7 @@ elif menu == "Reportes":
         csv = df_rep.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Descargar Reporte en Excel (CSV)", csv, f"{tipo_reporte.lower().replace(' ', '_').replace('(', '').replace(')', '')}.csv", "text/csv")
         
-        # HTML preparado con orientación horizontal (landscape) y alineación contable a la derecha
+        # HTML con orientación horizontal y CSS para alinear montos a la derecha
         html_content = f"""
         <html>
         <head>
@@ -412,7 +424,7 @@ elif menu == "Reportes":
                 table {{ width: 100%; border-collapse: collapse; margin-top: 15px; }}
                 th, td {{ border: 1px solid #bbb; padding: 6px 8px; text-align: left; font-size: 11px; }}
                 th {{ background-color: #f2f2f2; text-align: center; }}
-                /* Alinea a la derecha las columnas numéricas/contables */
+                /* Alinea a la derecha automáticamente las columnas que contienen montos o números */
                 td:nth-child(n+3), th:nth-child(n+3) {{ text-align: right; }}
             </style>
         </head>
