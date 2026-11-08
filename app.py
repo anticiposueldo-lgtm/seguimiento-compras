@@ -446,7 +446,7 @@ elif menu == "Reportes":
         except:
             return False, None
 
-    # Lógica general para filtrar DataFrames según el submenú seleccionado
+    # Lógica general para filtrar DataFrames según el submenú seleccionado con seguridad contra nulos
     def cumple_criterio_fecha(val_fecha):
         if "1." in sub_menu_sintesis:
             return True
@@ -817,25 +817,26 @@ elif menu == "Reportes":
 
     elif tipo_reporte == "Consolidado: Pagos con Cheques a la Fecha":
         if not df_tesoreria.empty:
-            col_medio = df_tesoreria.columns[12] if len(df_tesoreria.columns) > 12 else None
-            col_f_deb = df_tesoreria.columns[14] if len(df_tesoreria.columns) > 14 else None
+            col_medio = next((c for c in df_tesoreria.columns if "MEDIO" in c.upper()), df_tesoreria.columns[12] if len(df_tesoreria.columns) > 12 else None)
+            col_f_deb = next((c for c in df_tesoreria.columns if "DÉBITO" in c.upper() or "DEBITO" in c.upper() or "CHEQUE" in c.upper()), df_tesoreria.columns[14] if len(df_tesoreria.columns) > 14 else None)
             col_monto_pago = df_tesoreria.columns[8] if len(df_tesoreria.columns) > 8 else None
             
-            if col_medio:
+            if col_medio and col_f_deb:
                 df_cheques = df_tesoreria[df_tesoreria[col_medio].astype(str).str.strip().str.lower() == "cheque"].copy()
-                if not df_cheques.empty and col_f_deb:
+                if not df_cheques.empty:
                     if "1." not in sub_menu_sintesis:
                         df_cheques = df_cheques[df_cheques[col_f_deb].apply(cumple_criterio_fecha)]
                     
                     df_cheques[col_monto_pago] = pd.to_numeric(df_cheques[col_monto_pago], errors='coerce').fillna(0.0)
-                    df_cheques[col_f_deb] = pd.to_datetime(df_cheques[col_f_deb], errors='coerce').dt.strftime('%d/%m/%Y').fillna(df_cheques[col_f_deb])
+                    df_temp_fdeb = pd.to_datetime(df_cheques[col_f_deb], errors='coerce')
+                    df_cheques[col_f_deb] = df_temp_fdeb.dt.strftime('%d/%m/%Y').fillna(df_cheques[col_f_deb])
                     df_rep = df_cheques.copy()
                     total_general_num = df_cheques[col_monto_pago].sum()
                     df_rep[col_monto_pago] = df_rep[col_monto_pago].apply(formatear_moneda)
 
     elif tipo_reporte == "Consolidado: Facturas con Pago Parcial Pendiente":
         if not df_facturas.empty:
-            col_venc = df_facturas.columns[9] if len(df_facturas.columns) > 9 else None
+            col_venc = next((c for c in df_facturas.columns if "VENCIMIENTO" in c.upper()), df_facturas.columns[9] if len(df_facturas.columns) > 9 else None)
             datos_parciales_teso = []
             for _, fac in df_facturas.iterrows():
                 if "1." not in sub_menu_sintesis and col_venc and not cumple_criterio_fecha(fac.get(col_venc)):
