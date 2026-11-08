@@ -437,8 +437,12 @@ elif menu == "Reportes":
 
     def es_fecha_valida(val_fecha):
         try:
+            if val_fecha is None or str(val_fecha).strip() in ["", "nan", "NaT", "None"]:
+                return False, None
             dt = pd.to_datetime(val_fecha, errors='coerce')
-            return pd.notnull(dt), dt
+            if pd.isnull(dt):
+                return False, None
+            return True, dt
         except:
             return False, None
 
@@ -447,7 +451,7 @@ elif menu == "Reportes":
         if "1." in sub_menu_sintesis:
             return True
         val, dt = es_fecha_valida(val_fecha)
-        if not val:
+        if not val or dt is None:
             return False
         
         if mes_num_sel == 12:
@@ -539,7 +543,7 @@ elif menu == "Reportes":
                 if not df_cp.empty and col_f_c:
                     for _, row in df_cp.iterrows():
                         val, dt = es_fecha_valida(row.get(col_f_c))
-                        if val and dt < fecha_limite:
+                        if val and dt is not None and dt < fecha_limite:
                             monto_comp_pend_mes += float(row.get(col_m_c, 0.0) or 0.0)
 
             saldo_op_mes = 0.0
@@ -548,7 +552,7 @@ elif menu == "Reportes":
                     if str(c_row.get("PROVEEDOR")) == "ANULADO":
                         continue
                     val, dt = es_fecha_valida(c_row.iloc[1])
-                    if val and dt < fecha_limite:
+                    if val and dt is not None and dt < fecha_limite:
                         n_oc = str(c_row.iloc[0]).strip()
                         m_oc = float(c_row.iloc[4] or 0.0)
                         facs_match = df_facturas[df_facturas.iloc[:, 0].astype(str).str.strip() == n_oc]
@@ -567,7 +571,7 @@ elif menu == "Reportes":
                 if not df_f_np.empty and col_venc and col_m_fac:
                     for _, frow in df_f_np.iterrows():
                         val, dt_v = es_fecha_valida(frow.get(col_venc))
-                        if val and dt_v < fecha_limite:
+                        if val and dt_v is not None and dt_v < fecha_limite:
                             monto_f = float(frow.get(col_m_fac, 0.0) or 0.0)
                             if dt_v < hoy:
                                 facturas_vencidas_monto += monto_f
@@ -578,7 +582,7 @@ elif menu == "Reportes":
             if not df_facturas.empty:
                 for _, f_row in df_facturas.iterrows():
                     val, dt_v = es_fecha_valida(f_row.iloc[9] if len(f_row) > 9 else None)
-                    if val and dt_v < fecha_limite:
+                    if val and dt_v is not None and dt_v < fecha_limite:
                         n_f = str(f_row.iloc[6]).strip()
                         m_f = float(f_row.iloc[8] or 0.0)
                         t_pag = 0.0
@@ -608,7 +612,7 @@ elif menu == "Reportes":
                 if not df_f_np.empty and col_venc and col_m_fac:
                     for _, frow in df_f_np.iterrows():
                         val, dt_v = es_fecha_valida(frow.get(col_venc))
-                        if val and dt_v.year == anio_sel and dt_v.month == mes_num_sel:
+                        if val and dt_v is not None and dt_v.year == anio_sel and dt_v.month == mes_num_sel:
                             facturas_vencidas_mes += float(frow.get(col_m_fac, 0.0) or 0.0)
 
             if not df_tesoreria.empty:
@@ -619,7 +623,7 @@ elif menu == "Reportes":
                     df_ch = df_tesoreria[df_tesoreria[col_medio].astype(str).str.strip().str.lower() == "cheque"].copy()
                     for _, crow in df_ch.iterrows():
                         val, dt_d = es_fecha_valida(crow.get(col_f_deb))
-                        if val and dt_d.year == anio_sel and dt_d.month == mes_num_sel:
+                        if val and dt_d is not None and dt_d.year == anio_sel and dt_d.month == mes_num_sel:
                             cheques_debito_mes += float(crow.get(col_m_pago, 0.0) or 0.0)
 
             df_rep = pd.DataFrame([
@@ -636,15 +640,11 @@ elif menu == "Reportes":
             
             if col_prov and col_monto:
                 df_temp = df_facturas.copy()
-                if col_venc:
-                    df_temp["_filtro_venc"] = df_temp[col_venc]
-                    if "1." not in sub_menu_sintesis:
-                        df_temp = df_temp[df_temp["_filtro_venc"].apply(cumple_criterio_fecha)]
+                if col_venc and "1." not in sub_menu_sintesis:
+                    df_temp = df_temp[df_temp[col_venc].apply(cumple_criterio_fecha)]
                 
                 df_temp[col_monto] = pd.to_numeric(df_temp[col_monto], errors='coerce').fillna(0.0)
                 df_rep = df_temp.sort_values(by=col_prov)
-                if "_filtro_venc" in df_rep.columns:
-                    df_rep.drop(columns=["_filtro_venc"], inplace=True)
                 
                 if col_venc:
                     df_rep[col_venc] = pd.to_datetime(df_rep[col_venc], errors='coerce').dt.strftime('%d/%m/%Y').fillna(df_rep[col_venc])
@@ -668,7 +668,7 @@ elif menu == "Reportes":
                 df_temp_fecha = pd.to_datetime(df_temp[col_venc], errors='coerce')
                 df_temp["_temp_sort"] = df_temp_fecha
                 df_rep = df_temp.sort_values(by="_temp_sort")
-                df_rep.drop(columns=["_temp_sort"], inplace=True)
+                df_rep.drop(columns=["_temp_sort"], inplace=True, errors='ignore')
                 
                 df_rep[col_venc] = df_temp_fecha.dt.strftime('%d/%m/%Y').fillna(df_rep[col_venc])
                 df_rep = df_rep[[col_venc, col_prov, 'N FACTURA', col_monto]]
@@ -693,7 +693,7 @@ elif menu == "Reportes":
                     df_temp_fdeb = pd.to_datetime(df_cheques[col_f_deb], errors='coerce')
                     df_cheques["_temp_sort"] = df_temp_fdeb
                     df_cheques = df_cheques.sort_values(by="_temp_sort")
-                    df_cheques.drop(columns=["_temp_sort"], inplace=True)
+                    df_cheques.drop(columns=["_temp_sort"], inplace=True, errors='ignore')
                     
                     df_cheques[col_f_deb] = df_temp_fdeb.dt.strftime('%d/%m/%Y').fillna(df_cheques[col_f_deb])
                     columnas_mostrar = [c for c in [col_f_deb, col_prov, col_m_pago, col_banco, 'N FACTURA'] if c in df_cheques.columns]
