@@ -363,7 +363,6 @@ elif menu == "Reportes":
     ])
     
     st.markdown("---")
-    
     st.markdown("### Municipalidad de Sunchales - Seguimiento Financiero")
     st.markdown(f"#### Reporte: {tipo_reporte}")
     
@@ -373,7 +372,7 @@ elif menu == "Reportes":
             cols_deseadas = []
             for c in df_raw.columns:
                 c_up = str(c).upper()
-                if any(x in c_up for x in ["PROVEEDOR", "MONTO", "MEDIO", "BANCO", "DÉBITO", "DEBITO", "CHEQUE", "PAGO"]):
+                if any(x in c_up for x in ["PROVEEDOR", "MEDIO", "BANCO", "DÉBITO", "DEBITO", "CHEQUE", "PAGO", "FACTURA", "ORDEN"]):
                     cols_deseadas.append(c)
             df_rep = df_raw[cols_deseadas].copy() if cols_deseadas else df_raw.copy()
         else:
@@ -391,25 +390,48 @@ elif menu == "Reportes":
             (df_rep[primera_col].astype(str).str.lower() != "nan")
         ].copy()
         
-        # 2. Formatear fechas a solo Día/Mes/Año para evitar horas y minutos
+        # 2. Formatear fechas de manera limpia a Día/Mes/Año
         for col in df_rep.columns:
             col_up = str(col).upper()
             if any(k in col_up for k in ["FECHA", "VENCIMIENTO", "DÉBITO", "DEBITO"]):
-                df_rep[col] = pd.to_datetime(df_rep[col], errors='coerce', dayfirst=True).dt.strftime('%d/%m/%Y').fillna(df_rep[col])
+                df_rep[col] = pd.to_datetime(df_rep[col], errors='coerce').dt.strftime('%d/%m/%Y').fillna(df_rep[col])
         
-        # 3. Formateo contable para columnas numéricas/montos
+        # 3. Calcular totales y aplicar formato contable en columnas numéricas/montos
+        totales_dict = {}
         for col in df_rep.columns:
             col_up = str(col).upper()
             if any(k in col_up for k in ["MONTO", "PAGADO", "TOTAL", "IMPORTE", "SALDO"]):
-                df_rep[col] = pd.to_numeric(df_rep[col], errors='coerce').fillna(0.0).apply(lambda x: f"${x:,.2f}")
+                vals_num = pd.to_numeric(df_rep[col], errors='coerce').fillna(0.0)
+                totales_dict[col] = vals_num.sum()
+                df_rep[col] = vals_num.apply(lambda x: f"${x:,.2f}")
 
     if not df_rep.empty:
         st.dataframe(df_rep, use_container_width=True)
         
+        # Mostrar Totales en pantalla de forma destacada
+        if totales_dict:
+            st.markdown("### 📌 Totales del Reporte:")
+            cols_totales = st.columns(len(totales_dict))
+            for i, (col_nombre, val_total) in enumerate(totales_dict.items()):
+                cols_totales[i].metric(label=f"Total {col_nombre}", value=f"${val_total:,.2f}")
+        
         csv = df_rep.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Descargar Reporte en Excel (CSV)", csv, f"{tipo_reporte.lower().replace(' ', '_').replace('(', '').replace(')', '')}.csv", "text/csv")
         
-        # HTML con orientación horizontal y CSS para alinear montos a la derecha
+        # Construcción de la fila de totales para HTML de impresión
+        html_totales_tr = ""
+        if totales_dict:
+            html_totales_tr = "<tr style='font-weight: bold; background-color: #e9ecef;'>"
+            for col in df_rep.columns:
+                if col in totales_dict:
+                    html_totales_tr += f"<td style='text-align: right;'>${totales_dict[col]:,.2f}</td>"
+                elif col == df_rep.columns[0]:
+                    html_totales_tr += "<td>TOTAL GENERAL</td>"
+                else:
+                    html_totales_tr += "<td></td>"
+            html_totales_tr += "</tr>"
+
+        # HTML con orientación horizontal, montos alineados a la derecha y fila de totales
         html_content = f"""
         <html>
         <head>
@@ -424,14 +446,13 @@ elif menu == "Reportes":
                 table {{ width: 100%; border-collapse: collapse; margin-top: 15px; }}
                 th, td {{ border: 1px solid #bbb; padding: 6px 8px; text-align: left; font-size: 11px; }}
                 th {{ background-color: #f2f2f2; text-align: center; }}
-                /* Alinea a la derecha automáticamente las columnas que contienen montos o números */
                 td:nth-child(n+3), th:nth-child(n+3) {{ text-align: right; }}
             </style>
         </head>
         <body>
             <h2>Municipalidad de Sunchales</h2>
             <h4>Seguimiento Financiero - {tipo_reporte}</h4>
-            {df_rep.to_html(index=False, classes='table', escape=False)}
+            {df_rep.to_html(index=False, classes='table', escape=False).replace("</tbody>", html_totales_tr + "</tbody>")}
             <script>
                 window.onload = function() {{
                     window.print();
