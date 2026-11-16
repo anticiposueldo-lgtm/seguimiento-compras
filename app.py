@@ -312,7 +312,7 @@ elif menu == "Tesorería":
                         st.subheader("Completar datos de Pago")
                         fecha_pago = st.date_input("Fecha de Pago")
                         n_orden_pago = st.text_input("N° Orden de Pago")
-                        medio_pago = st.selectbox("Medio de Pago", ["Transferencia", "Cheque", "Efectivo"])
+                        medio_pago = st.selectbox("Medio de Pago", ["Transferencia", "Cheque", "Efectivo", "Compensación"])
                         banco_pago = st.text_input("Banco")
                         fecha_debito_cheque = st.date_input("Fecha Débito / Cheque")
                         
