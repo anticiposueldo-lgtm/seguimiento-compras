@@ -304,18 +304,22 @@ elif menu == "Tesorería":
                         st.warning(f"⚠️ Esta factura ya tiene pagos parciales registrados por un total de **${monto_pagado_previo:,.2f}**.")
                     st.markdown(f"### 💵 El saldo restante a pagar de esta Factura es: **${monto_restante:,.2f}**")
 
-                    with st.form("form_tesoreria", clear_on_submit=True):
+                    with st.form("form_tesoreria", clear_on_submit=False):
                         st.subheader("Completar datos de Pago")
                         fecha_pago = st.date_input("Fecha de Pago")
                         n_orden_pago = st.text_input("N° Orden de Pago")
                         medio_pago = st.selectbox("Medio de Pago", ["Transferencia", "Cheque", "Efectivo", "Compensación"])
                         banco_pago = st.text_input("Banco")
                         fecha_debito_cheque = st.date_input("Fecha Débito / Cheque")
-                        tipo_pago = st.selectbox("Tipo de Pago", ["Pago Parcial", "Pago Total"])
                         
-                        # Si es Pago Total, por defecto toma el saldo restante
-                        valor_defecto_pago = monto_restante if tipo_pago == "Pago Parcial" else monto_restante
-                        monto_a_pagar = st.number_input("Monto de este Pago", min_value=0.0, max_value=float(monto_restante), value=float(valor_defecto_pago), format="%.2f")
+                        # Input numérico limpio para capturar exactamente el monto parcial o total ingresado
+                        monto_a_pagar = st.number_input(
+                            "Monto de este Pago (Parcial o Total)", 
+                            min_value=0.0, 
+                            max_value=float(monto_restante), 
+                            value=float(monto_restante), 
+                            format="%.2f"
+                        )
                         
                         submit_teso = st.form_submit_button("Guardar Datos de Tesorería")
 
@@ -335,32 +339,33 @@ elif menu == "Tesorería":
                             c_f_comp = str(val_list[7]) if len(val_list) > 7 else ""
                             c_f_venc = str(val_list[9]) if len(val_list) > 9 else ""
 
-                            # Aquí se envía explícitamente float(monto_a_pagar) en la columna 8 (índice 8)
+                            # Lista exacta de 15 elementos requeridos para TESORERIA
                             valores_teso = [
-                                c_orden, 
-                                c_fecha, 
-                                c_n_prov, 
-                                c_prov, 
-                                c_monto_oc, 
-                                c_estado, 
-                                c_n_fac, 
-                                c_f_comp, 
-                                float(monto_a_pagar),  # <--- Monto parcial o ingresado correctamente
-                                c_f_venc, 
-                                str(fecha_pago), 
-                                str(n_orden_pago), 
-                                str(medio_pago), 
-                                str(banco_pago), 
-                                str(fecha_debito_cheque)
+                                c_orden,                               # 0
+                                c_fecha,                               # 1
+                                c_n_prov,                              # 2
+                                c_prov,                                # 3
+                                c_monto_oc,                            # 4
+                                c_estado,                              # 5
+                                c_n_fac,                               # 6
+                                c_f_comp,                              # 7
+                                float(monto_a_pagar),                  # 8 -> ¡Aquí se guarda estrictamente el monto ingresado!
+                                c_f_venc,                              # 9
+                                str(fecha_pago),                       # 10
+                                str(n_orden_pago),                     # 11
+                                str(medio_pago),                       # 12
+                                str(banco_pago),                       # 13
+                                str(fecha_debito_cheque)               # 14
                             ]
 
+                            # Envío y validación de respuesta estricta
                             resultado_guardado = guardar_fila("TESORERIA", valores_teso)
+                            
                             if resultado_guardado is not None:
-                                st.success("¡Datos de tesorería guardados correctamente en la planilla!")
+                                st.success(f"¡Pago de ${float(monto_a_pagar):,.2f} guardado correctamente en la planilla de Tesorería!")
                                 st.rerun()
                             else:
-                                st.error("No se pudo guardar en la planilla. Revisa la conexión.")
-
+                                st.error("❌ Error de comunicación con Google Apps Script. No se pudo registrar el pago.")
 # ==========================================
 # 4. SECCIÓN REPORTES
 # ==========================================
