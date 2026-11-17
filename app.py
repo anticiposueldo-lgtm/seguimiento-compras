@@ -359,10 +359,10 @@ elif menu == "Tesorería":
             str(fecha_debito_cheque)
         ]
 
+        guardar_fila("TESORERIA", valores_teso)
+        st.success("¡Datos de tesorería guardados encadenadamente de forma exitosa!")
+        st.rerun()
        
-                            guardar_fila("TESORERIA", valores_teso)
-                            st.success("¡Datos de tesorería guardados encadenadamente de forma exitosa!")
-                            st.rerun()
 
 # ==========================================
 # 4. SECCIÓN REPORTES
