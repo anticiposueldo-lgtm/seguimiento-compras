@@ -312,12 +312,17 @@ elif menu == "Tesorería":
                         banco_pago = st.text_input("Banco")
                         fecha_debito_cheque = st.date_input("Fecha Débito / Cheque")
                         
-                        # Input numérico limpio para capturar exactamente el monto parcial o total ingresado
+                        # Opción de Pago Parcial o Total devuelta y funcional
+                        tipo_pago = st.selectbox("Tipo de Pago", ["Pago Parcial", "Pago Total"])
+                        
+                        # Valor inicial predeterminado según el tipo elegido
+                        valor_defecto = float(monto_restante) if tipo_pago == "Pago Total" else 0.0
+                        
                         monto_a_pagar = st.number_input(
-                            "Monto de este Pago (Parcial o Total)", 
+                            "Monto a Pagar en esta Operación", 
                             min_value=0.0, 
                             max_value=float(monto_restante), 
-                            value=float(monto_restante), 
+                            value=float(valor_defecto), 
                             format="%.2f"
                         )
                         
@@ -339,33 +344,35 @@ elif menu == "Tesorería":
                             c_f_comp = str(val_list[7]) if len(val_list) > 7 else ""
                             c_f_venc = str(val_list[9]) if len(val_list) > 9 else ""
 
-                            # Lista exacta de 15 elementos requeridos para TESORERIA
+                            # Se asegura estrictamente que el valor enviado sea el de la casilla (monto_a_pagar)
+                            monto_final_operacion = float(monto_restante) if tipo_pago == "Pago Total" else float(monto_a_pagar)
+
                             valores_teso = [
-                                c_orden,                               # 0
-                                c_fecha,                               # 1
-                                c_n_prov,                              # 2
-                                c_prov,                                # 3
-                                c_monto_oc,                            # 4
-                                c_estado,                              # 5
-                                c_n_fac,                               # 6
-                                c_f_comp,                              # 7
-                                float(monto_a_pagar),                  # 8 -> ¡Aquí se guarda estrictamente el monto ingresado!
-                                c_f_venc,                              # 9
-                                str(fecha_pago),                       # 10
-                                str(n_orden_pago),                     # 11
-                                str(medio_pago),                       # 12
-                                str(banco_pago),                       # 13
-                                str(fecha_debito_cheque)               # 14
+                                str(c_orden),                        # 0
+                                str(c_fecha),                        # 1
+                                str(c_n_prov),                       # 2
+                                str(c_prov),                         # 3
+                                float(c_monto_oc),                   # 4
+                                str(c_estado),                       # 5
+                                str(c_n_fac),                        # 6
+                                str(c_f_comp),                       # 7
+                                float(monto_final_operacion),        # 8 -> ¡Aquí se va el monto exacto escrito/seleccionado!
+                                str(c_f_venc),                       # 9
+                                str(fecha_pago),                     # 10
+                                str(n_orden_pago),                   # 11
+                                str(medio_pago),                     # 12
+                                str(banco_pago),                     # 13
+                                str(fecha_debito_cheque)             # 14
                             ]
 
-                            # Envío y validación de respuesta estricta
                             resultado_guardado = guardar_fila("TESORERIA", valores_teso)
                             
                             if resultado_guardado is not None:
-                                st.success(f"¡Pago de ${float(monto_a_pagar):,.2f} guardado correctamente en la planilla de Tesorería!")
+                                st.success(f"¡Pago registrado con éxito por un monto de ${float(monto_final_operacion):,.2f}!")
                                 st.rerun()
                             else:
-                                st.error("❌ Error de comunicación con Google Apps Script. No se pudo registrar el pago.")
+                                st.error("❌ Error al guardar en Google Sheets. Comprueba la conexión con el servidor.")
+
 # ==========================================
 # 4. SECCIÓN REPORTES
 # ==========================================
