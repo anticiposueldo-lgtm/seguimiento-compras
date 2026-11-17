@@ -340,28 +340,28 @@ elif menu == "Tesorería":
                             c_f_venc = str(val_list[9]) if len(val_list) > 9 else ""
                             
                             # Usamos float(monto_a_pagar) para que guarde el monto parcial o el saldo abonado, 
-        # en lugar del total de la factura (c_m_fac).
-        valores_teso = [
-            c_orden, 
-            c_fecha, 
-            c_n_prov, 
-            c_prov, 
-            c_monto_oc, 
-            c_estado, 
-            c_n_fac, 
-            c_f_comp, 
-            float(monto_a_pagar),  # <--- CAMBIO AQUÍ
-            c_f_venc, 
-            str(fecha_pago), 
-            str(n_orden_pago), 
-            str(medio_pago), 
-            str(banco_pago), 
-            str(fecha_debito_cheque)
-        ]
+                            # en lugar del total de la factura (c_m_fac).
+                            valores_teso = [
+                                c_orden, 
+                                c_fecha, 
+                                c_n_prov, 
+                                c_prov, 
+                                c_monto_oc, 
+                                c_estado, 
+                                c_n_fac, 
+                                c_f_comp, 
+                                float(monto_a_pagar),  # <--- CAMBIO AQUÍ
+                                c_f_venc, 
+                                str(fecha_pago), 
+                                str(n_orden_pago), 
+                                str(medio_pago), 
+                                str(banco_pago), 
+                                str(fecha_debito_cheque)
+                            ]
 
-        guardar_fila("TESORERIA", valores_teso)
-        st.success("¡Datos de tesorería guardados encadenadamente de forma exitosa!")
-        st.rerun()
+                            guardar_fila("TESORERIA", valores_teso)
+                            st.success("¡Datos de tesorería guardados encadenadamente de forma exitosa!")
+                            st.rerun()
        
 
 # ==========================================
