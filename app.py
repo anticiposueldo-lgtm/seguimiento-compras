@@ -229,28 +229,26 @@ elif menu == "Tesorería":
     st.header("💰 Gestión de Tesorería")
     df_facturas = obtener_datos("FACTURAS")
     df_tesoreria = obtener_datos("TESORERIA")
-    
+
     if not df_facturas.empty:
         col_oc_facturas = df_facturas.columns[0]
         lista_ordenes = df_facturas[col_oc_facturas].astype(str).unique().tolist()
         n_orden_teso = st.selectbox("Seleccione el N° de Orden de Compra para Tesorería:", [""] + lista_ordenes)
-        
+
         if n_orden_teso and n_orden_teso != "":
             facturas_orden = df_facturas[df_facturas[col_oc_facturas].astype(str) == n_orden_teso]
-            
             facturas_pendientes = []
+
             for _, fac in facturas_orden.iterrows():
                 n_fac = str(fac.iloc[6]) if len(fac) > 6 else ""
-                
                 monto_f_total = 0.0
                 try:
                     monto_f_total = float(fac.iloc[8]) if len(fac) > 8 and pd.notnull(fac.iloc[8]) else 0.0
                 except:
                     monto_f_total = 0.0
-                
+
                 pagada_total = False
                 total_pagado_acumulado = 0.0
-                
                 if not df_tesoreria.empty and n_fac:
                     for _, p in df_tesoreria.iterrows():
                         try:
@@ -259,27 +257,26 @@ elif menu == "Tesorería":
                                 total_pagado_acumulado += float(p.iloc[8]) if len(p) > 8 and pd.notnull(p.iloc[8]) else 0.0
                         except:
                             pass
-                
+
                 if monto_f_total > 0 and total_pagado_acumulado >= monto_f_total:
                     pagada_total = True
-                
+
                 if not pagada_total and n_fac:
                     fac_dict = fac.to_dict()
                     fac_dict["_MONTO_REAL"] = monto_f_total
                     fac_dict["_N_FAC_REAL"] = n_fac
                     facturas_pendientes.append(fac_dict)
-            
+
             if not facturas_pendientes:
                 st.success("✅ ¡Todas las facturas asociadas a esta Orden de Compra ya han sido pagadas en su totalidad!")
             else:
                 lista_n_facturas = [str(f.get("_N_FAC_REAL", "")) for f in facturas_pendientes]
                 n_factura_seleccionada = st.selectbox("Seleccione el N° de Factura a pagar:", [""] + lista_n_facturas)
-                
+
                 if n_factura_seleccionada and n_factura_seleccionada != "":
                     datos_factura = next(f for f in facturas_pendientes if str(f.get("_N_FAC_REAL", "")) == n_factura_seleccionada)
-                    
                     monto_fac_val = datos_factura.get("_MONTO_REAL", 0.0)
-                    
+
                     monto_pagado_previo = 0.0
                     if not df_tesoreria.empty:
                         for _, p in df_tesoreria.iterrows():
@@ -289,11 +286,11 @@ elif menu == "Tesorería":
                                     monto_pagado_previo += float(p.iloc[8]) if len(p) > 8 and pd.notnull(p.iloc[8]) else 0.0
                             except:
                                 pass
-                    
+
                     monto_restante = monto_fac_val - monto_pagado_previo
                     if monto_restante < 0:
                         monto_restante = 0.0
-                    
+
                     proveedor_nombre = ""
                     for col_key in datos_factura.keys():
                         if "PROVEEDOR" in str(col_key).upper() and "N" not in str(col_key).upper():
@@ -301,13 +298,12 @@ elif menu == "Tesorería":
                             break
                     if not proveedor_nombre and len(datos_factura) > 3:
                         proveedor_nombre = str(list(datos_factura.values())[3])
-                    
+
                     st.info(f"**Proveedor:** {proveedor_nombre} | **Monto Total Factura:** ${monto_fac_val:,.2f}")
                     if monto_pagado_previo > 0:
                         st.warning(f"⚠️ Esta factura ya tiene pagos parciales registrados por un total de **${monto_pagado_previo:,.2f}**.")
-                    
-                    st.markdown(f"### 💵 El monto a pagar de esta Factura es: **${monto_restante:,.2f}**")
-                    
+                    st.markdown(f"### 💵 El saldo restante a pagar de esta Factura es: **${monto_restante:,.2f}**")
+
                     with st.form("form_tesoreria", clear_on_submit=True):
                         st.subheader("Completar datos de Pago")
                         fecha_pago = st.date_input("Fecha de Pago")
@@ -315,32 +311,31 @@ elif menu == "Tesorería":
                         medio_pago = st.selectbox("Medio de Pago", ["Transferencia", "Cheque", "Efectivo", "Compensación"])
                         banco_pago = st.text_input("Banco")
                         fecha_debito_cheque = st.date_input("Fecha Débito / Cheque")
-                        
                         tipo_pago = st.selectbox("Tipo de Pago", ["Pago Parcial", "Pago Total"])
-                        monto_a_pagar = st.number_input("Monto de este Pago", min_value=0.0, max_value=float(monto_restante), value=float(monto_restante), format="%.2f")
+                        
+                        # Si es Pago Total, por defecto toma el saldo restante
+                        valor_defecto_pago = monto_restante if tipo_pago == "Pago Parcial" else monto_restante
+                        monto_a_pagar = st.number_input("Monto de este Pago", min_value=0.0, max_value=float(monto_restante), value=float(valor_defecto_pago), format="%.2f")
                         
                         submit_teso = st.form_submit_button("Guardar Datos de Tesorería")
-                        if submit_submit := submit_teso:
+
+                        if submit_teso:
                             val_list = list(datos_factura.values())
                             c_orden = str(val_list[0]) if len(val_list) > 0 else ""
                             c_fecha = str(val_list[1]) if len(val_list) > 1 else ""
                             c_n_prov = str(val_list[2]) if len(val_list) > 2 else ""
                             c_prov = str(proveedor_nombre)
-                            
                             c_monto_oc = 0.0
                             try:
                                 c_monto_oc = float(val_list[4]) if len(val_list) > 4 and pd.notnull(val_list[4]) else 0.0
                             except:
                                 pass
-                                
                             c_estado = str(val_list[5]) if len(val_list) > 5 else ""
                             c_n_fac = str(n_factura_seleccionada)
                             c_f_comp = str(val_list[7]) if len(val_list) > 7 else ""
-                            c_m_fac = float(monto_fac_val) 
                             c_f_venc = str(val_list[9]) if len(val_list) > 9 else ""
-                            
-                            # Usamos float(monto_a_pagar) para que guarde el monto parcial o el saldo abonado, 
-                            # en lugar del total de la factura (c_m_fac).
+
+                            # Aquí se envía explícitamente float(monto_a_pagar) en la columna 8 (índice 8)
                             valores_teso = [
                                 c_orden, 
                                 c_fecha, 
@@ -350,7 +345,7 @@ elif menu == "Tesorería":
                                 c_estado, 
                                 c_n_fac, 
                                 c_f_comp, 
-                                float(monto_a_pagar),  # <--- CAMBIO AQUÍ
+                                float(monto_a_pagar),  # <--- Monto parcial o ingresado correctamente
                                 c_f_venc, 
                                 str(fecha_pago), 
                                 str(n_orden_pago), 
@@ -359,10 +354,12 @@ elif menu == "Tesorería":
                                 str(fecha_debito_cheque)
                             ]
 
-                            guardar_fila("TESORERIA", valores_teso)
-                            st.success("¡Datos de tesorería guardados encadenadamente de forma exitosa!")
-                            st.rerun()
-       
+                            resultado_guardado = guardar_fila("TESORERIA", valores_teso)
+                            if resultado_guardado is not None:
+                                st.success("¡Datos de tesorería guardados correctamente en la planilla!")
+                                st.rerun()
+                            else:
+                                st.error("No se pudo guardar en la planilla. Revisa la conexión.")
 
 # ==========================================
 # 4. SECCIÓN REPORTES
