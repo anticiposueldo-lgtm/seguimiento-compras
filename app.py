@@ -243,7 +243,7 @@ elif menu == "Facturas":
                         st.rerun()
 
             elif accion_factura == "Modificar Monto de Factura Existente":
-                st.subheader("✏️ Modificar Monto de Factura (Columna I)")
+                st.subheader("✏️ Modificar Monto de Factura")
                 if match_facs.empty:
                     st.info("Esta Orden de Compra aún no tiene facturas cargadas para modificar.")
                 else:
