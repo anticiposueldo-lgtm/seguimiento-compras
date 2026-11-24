@@ -6,7 +6,7 @@ st.set_page_config(page_title="Seguimiento Cierre Anual", layout="wide")
 
 st.title("📊 Panel de Compras y Pagos")
 
-WEB_APP_URL = "https://script.google.com/macros/s/AKfycbx64d_-HsdEofZLzLg3EQ58DeS_2ESQ5PlbTdKp4ObxkRHcQgtmdNJ1MIcFyjjDRELJ1Q/exec"
+WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwa7cAXO7G-I234OSo1C0xKLIz7xeF85YvabqlFOqaaUMGM7NEFfFkolIyZtVW3COsqNQ/exec"
 
 def obtener_datos(sheet_name):
     try:
