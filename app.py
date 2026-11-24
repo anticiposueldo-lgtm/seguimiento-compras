@@ -49,6 +49,20 @@ def eliminar_fila(sheet_name, orden):
     except Exception as e:
         st.error(f"Error al eliminar: {e}")
         return None
+        
+def actualizar_monto_factura(n_orden, n_factura, nuevo_monto):
+    try:
+        payload = {
+            "action": "updateMontoFactura",
+            "nOrden": str(n_orden),
+            "nFactura": str(n_factura),
+            "nuevoMonto": float(nuevo_monto)
+        }
+        response = requests.post(WEB_APP_URL, json=payload)
+        return response.json()
+    except Exception as e:
+        st.error(f"Error al actualizar el monto: {e}")
+        return None
 
 menu = st.sidebar.radio("Secciones", ["Compras", "Facturas", "Tesorería", "Reportes"])
 
