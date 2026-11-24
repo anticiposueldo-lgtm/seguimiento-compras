@@ -152,9 +152,9 @@ elif menu == "Facturas":
         
         if n_orden_buscar and n_orden_buscar != "":
             datos_orden = df_validas[df_validas["NUMERO ORDEN DE COMPRAS"].astype(str) == n_orden_buscar].iloc[0]
-            
             estado_actual_fac = "Pendiente"
             total_facturado_previo = 0.0
+            match_facs = pd.DataFrame()
             
             if not df_facturas.empty:
                 col_oc_fac = df_facturas.columns[0]
@@ -163,7 +163,6 @@ elif menu == "Facturas":
                     col_est = next((c for c in match_facs.columns if "ESTADO" in c.upper()), match_facs.columns[5] if len(match_facs.columns) > 5 else None)
                     if col_est:
                         estado_actual_fac = str(match_facs.iloc[-1].get(col_est, "Pendiente"))
-                    
                     col_monto_f = next((c for c in match_facs.columns if "MONTO FACTURA" in c.upper() or "MONTO COMP" in c.upper()), match_facs.columns[8] if len(match_facs.columns) > 8 else None)
                     if col_monto_f:
                         for _, f_row in match_facs.iterrows():
@@ -171,56 +170,112 @@ elif menu == "Facturas":
                                 total_facturado_previo += float(f_row.get(col_monto_f, 0.0))
                             except:
                                 pass
-            
+                                
             monto_compra_total = float(datos_orden.get('MONTO', 0.0) if pd.notnull(datos_orden.get('MONTO')) else 0.0)
             monto_disponible = monto_compra_total - total_facturado_previo
             if monto_disponible < 0:
                 monto_disponible = 0.0
-            
+                
             st.info("Datos recuperados de la Orden de Compra:")
             col1, col2, col3 = st.columns(3)
             col1.write(f"**Proveedor:** {datos_orden.get('PROVEEDOR', '')}")
-            
             monto_compra_fmt = f"${monto_compra_total:,.2f}"
             col2.write(f"**Monto Compra:** {monto_compra_fmt}")
-            
             col3.write(f"**Estado Actual:** {estado_actual_fac}")
             
             if total_facturado_previo > 0:
                 st.warning(f"⚠️ Ya se facturó un total de **${total_facturado_previo:,.2f}** para esta orden.")
-            
             st.markdown(f"### 💵 Monto disponible para facturar: **${monto_disponible:,.2f}**")
             
-            with st.form("form_facturas", clear_on_submit=True):
-                st.subheader("Completar datos de Facturación y Estado")
-                n_factura = st.text_input("N° de Factura")
-                fecha_comprobante = st.date_input("Fecha de Comprobante")
-                monto_factura = st.number_input("Monto Factura", min_value=0.0, max_value=float(monto_disponible) if monto_disponible > 0 else 0.0, value=min(100.0, monto_disponible) if monto_disponible > 0 else 0.0, format="%.2f")
-                fecha_vencimiento = st.date_input("Fecha de Vencimiento")
-                
-                nuevo_estado_compra = st.selectbox("Actualizar Estado de la Orden de Compra:", ["Parcial", "Cerrada", "Pendiente"])
-                
-                submit_factura = st.form_submit_button("Guardar Datos de Factura")
-                if submit_factura:
-                    if nuevo_estado_compra == "Cerrada":
-                        monto_disponible = 0.0
-                        
-                    valores_fila = [
-                        str(datos_orden.get("NUMERO ORDEN DE COMPRAS", "")),
-                        str(datos_orden.get("FECHA", "")),
-                        str(datos_orden.get("N PROVEEDOR", "")),
-                        str(datos_orden.get("PROVEEDOR", "")),
-                        float(monto_compra_total),
-                        str(nuevo_estado_compra), 
-                        str(n_factura),           
-                        str(fecha_comprobante),   
-                        float(monto_factura),     
-                        str(fecha_vencimiento)    
-                    ]
+            accion_factura = st.radio(
+                "Operación a realizar:",
+                ["Cargar Nueva Factura", "Modificar Monto de Factura Existente"],
+                horizontal=True
+            )
+            
+            if accion_factura == "Cargar Nueva Factura":
+                with st.form("form_facturas", clear_on_submit=True):
+                    st.subheader("Completar datos de Facturación y Estado")
+                    n_factura = st.text_input("N° de Factura")
+                    fecha_comprobante = st.date_input("Fecha de Comprobante")
+                    monto_factura = st.number_input(
+                        "Monto Factura",
+                        min_value=0.0,
+                        max_value=float(monto_disponible) if monto_disponible > 0 else 0.0,
+                        value=min(100.0, monto_disponible) if monto_disponible > 0 else 0.0,
+                        format="%.2f"
+                    )
+                    fecha_vencimiento = st.date_input("Fecha de Vencimiento")
+                    nuevo_estado_compra = st.selectbox("Actualizar Estado de la Orden de Compra:", ["Parcial", "Cerrada", "Pendiente"])
+                    submit_factura = st.form_submit_button("Guardar Datos de Factura")
                     
-                    guardar_fila("FACTURAS", valores_fila, n_orden=n_orden_buscar, nuevo_estado=nuevo_estado_compra)
-                    st.success("¡Datos de factura guardados y estado de compra actualizado correctamente!")
-                    st.rerun()
+                    if submit_factura:
+                        if nuevo_estado_compra == "Cerrada":
+                            monto_disponible = 0.0
+                        valores_fila = [
+                            str(datos_orden.get("NUMERO ORDEN DE COMPRAS", "")),
+                            str(datos_orden.get("FECHA", "")),
+                            str(datos_orden.get("N PROVEEDOR", "")),
+                            str(datos_orden.get("PROVEEDOR", "")),
+                            float(monto_compra_total),
+                            str(nuevo_estado_compra),
+                            str(n_factura),
+                            str(fecha_comprobante),
+                            float(monto_factura),
+                            str(fecha_vencimiento)
+                        ]
+                        guardar_fila("FACTURAS", valores_fila, n_orden=n_orden_buscar, nuevo_estado=nuevo_estado_compra)
+                        st.success("¡Datos de factura guardados y estado de compra actualizado correctamente!")
+                        st.rerun()
+
+            elif accion_factura == "Modificar Monto de Factura Existente":
+                st.subheader("✏️ Modificar Monto de Factura (Columna I)")
+                if match_facs.empty:
+                    st.info("Esta Orden de Compra aún no tiene facturas cargadas para modificar.")
+                else:
+                    lista_facs_oc = [
+                        str(row.iloc[6]).strip()
+                        for _, row in match_facs.iterrows()
+                        if len(row) > 6 and str(row.iloc[6]).strip() != ""
+                    ]
+                    n_fac_modificar = st.selectbox("Seleccione el N° de Factura a modificar:", [""] + lista_facs_oc)
+                    
+                    if n_fac_modificar:
+                        df_tesoreria_check = obtener_datos("TESORERIA")
+                        en_tesoreria = False
+                        if not df_tesoreria_check.empty and len(df_tesoreria_check.columns) > 6:
+                            facs_en_teso = df_tesoreria_check.iloc[:, 6].astype(str).str.strip().tolist()
+                            if str(n_fac_modificar).strip() in facs_en_teso:
+                                en_tesoreria = True
+                        
+                        if en_tesoreria:
+                            st.error(f"🚫 La factura **N° {n_fac_modificar}** ya se encuentra registrada en **Tesorería**. No se puede modificar su monto.")
+                        else:
+                            fila_fac_sel = match_facs[match_facs.iloc[:, 6].astype(str).str.strip() == str(n_fac_modificar).strip()].iloc[0]
+                            monto_actual_fac = float(fila_fac_sel.iloc[8]) if len(fila_fac_sel) > 8 and pd.notnull(fila_fac_sel.iloc[8]) else 0.0
+                            fecha_comp_actual = str(fila_fac_sel.iloc[7]) if len(fila_fac_sel) > 7 else "-"
+                            fecha_venc_actual = str(fila_fac_sel.iloc[9]) if len(fila_fac_sel) > 9 else "-"
+                            max_permitido_mod = monto_disponible + monto_actual_fac
+                            
+                            st.caption(f"Fecha Comprobante: **{fecha_comp_actual}** | Vencimiento: **{fecha_venc_actual}** | Monto Actual: **${monto_actual_fac:,.2f}**")
+                            
+                            with st.form("form_modificar_monto_fac"):
+                                nuevo_monto_fac = st.number_input(
+                                    "Nuevo Monto de la Factura:",
+                                    min_value=0.0,
+                                    max_value=float(max_permitido_mod),
+                                    value=float(monto_actual_fac),
+                                    format="%.2f"
+                                )
+                                btn_actualizar_monto = st.form_submit_button("💾 Actualizar Monto")
+                                
+                                if btn_actualizar_monto:
+                                    res_upd = actualizar_monto_factura(n_orden_buscar, n_fac_modificar, nuevo_monto_fac)
+                                    if res_upd and res_upd.get("status") == "updated":
+                                        st.success(f"¡Monto de la factura N° {n_fac_modificar} actualizado a ${nuevo_monto_fac:,.2f}!")
+                                        st.rerun()
+                                    else:
+                                        st.error("No se pudo actualizar el monto en la planilla. Verifica el script de Google.")
 
 # ==========================================
 # 3. SECCIÓN TESORERÍA
